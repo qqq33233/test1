@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'home_page.dart';
 
 class StutLogin extends StatefulWidget {
@@ -30,42 +31,48 @@ class _StutLoginState extends State<StutLogin> {
 
   @override
   Widget build(BuildContext context) {
+    // Set system status bar to blue with white content
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF4E6691),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Header Bar - Full width
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4E6691), // New blue color
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 16.0),
-                    child: Text(
-                      'Student Login',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+      body: Column(
+        children: [
+          // Header Bar - Full width
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              bottom: 12,
+            ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF4E6691), // New blue color
+            ),
+            child: const Text(
+              'Student Login',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
-              
-              // Content with padding
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  children: [
-                
-                const SizedBox(height: 40),
+            ),
+          ),
+          
+          // Content with padding
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 40),
                 
                 // University Logo
                 Image.asset(
@@ -188,13 +195,12 @@ class _StutLoginState extends State<StutLogin> {
                   ),
                 ),
                 
-                const SizedBox(height: 40),
-                  ],
-                ),
+                  const SizedBox(height: 40),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

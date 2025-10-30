@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'parking_assignment.dart';
+import 'parking_status.dart';
+import 'visitor.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -24,49 +27,62 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Set system status bar to blue with white content
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF4E6691),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header Bar
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                color: Color(0xFF4E6691),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Welcome Back,',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const Text(
-                        'Student Name',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+      body: Column(
+        children: [
+          // Header Bar
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              bottom: 12,
             ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF4E6691),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome Back,',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Text(
+                      'Student Name',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
 
-            // Main Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+          // Main Content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -159,6 +175,20 @@ class _HomePageState extends State<HomePage> {
                                   builder: (context) => const ParkingAssignment(),
                                 ),
                               );
+                            } else if (function['label'] == 'Status') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ParkingStatus(),
+                                ),
+                              );
+                            } else if (function['label'] == 'Visitor') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const VisitorPage(),
+                                ),
+                              );
                             } else {
                               print('Tapped ${function['label']}');
                             }
@@ -200,7 +230,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
       // Bottom Navigation Bar
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
