@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'parking_assignment.dart';
 import 'parking_status.dart';
 import 'visitor.dart';
 import 'profile.dart';
+import 'locator.dart';
+import 'message.dart';
 
 class HomePage extends StatefulWidget {
   final String studentId;
@@ -16,6 +19,36 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  String _studentName = 'Student Name';
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadStudentName();
+  }
+
+  Future<void> _loadStudentName() async {
+    try {
+      final studentQuery = await _firestore
+          .collection('student')
+          .where('stdID', isEqualTo: widget.studentId)
+          .limit(1)
+          .get();
+
+      if (studentQuery.docs.isNotEmpty) {
+        final studentData = studentQuery.docs.first.data();
+        final name = studentData['stdName'] as String?;
+        if (name != null && name.isNotEmpty) {
+          setState(() {
+            _studentName = name;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading student name: $e');
+    }
+  }
 
   final List<Map<String, dynamic>> _functions = [
     {'image': 'assets/parking_logo.png', 'label': 'Parking'},
@@ -68,9 +101,9 @@ class _HomePageState extends State<HomePage> {
                         fontSize: 14,
                       ),
                     ),
-                    const Text(
-                      'Student Name',
-                      style: TextStyle(
+                    Text(
+                      _studentName,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -184,13 +217,20 @@ class _HomePageState extends State<HomePage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const VisitorPage(),
+                                  builder: (context) => VisitorPage(studentId: widget.studentId),
                                 ),
                               );
                             }else if (function['label'] == 'Profile') {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => const ProfilePage()),
+                                MaterialPageRoute(builder: (context) => ProfilePage(studentId: widget.studentId)),
+                              );
+                            } else if (function['label'] == 'Locator') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LocatorPage(),
+                                ),
                               );
                             }
                              else {
@@ -309,12 +349,19 @@ class _HomePageState extends State<HomePage> {
           _selectedIndex = index;
         });
         
-        // Navigate to Profile page when Profile button is clicked
+        // Navigate based on selection
         if (label == 'Profile') {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ProfilePage(studentId: widget.studentId),
+            ),
+          );
+        } else if (label == 'Message') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MessagePage(studentId: widget.studentId),
             ),
           );
         }

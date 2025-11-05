@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class VisitorHistoryPage extends StatelessWidget {
-  const VisitorHistoryPage({super.key});
+  final String? studentId;
+  
+  const VisitorHistoryPage({super.key, this.studentId});
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +79,39 @@ class VisitorHistoryPage extends StatelessWidget {
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                // Filter based on studentId and ensure status is "History"
+                List<QueryDocumentSnapshot> filteredDocs = [];
+                if (snapshot.hasData) {
+                  filteredDocs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    
+                    // CRITICAL: Double-check status to ensure it's "History"
+                    final status = data['vstStatus'] as String?;
+                    if (status == null || status.trim() != 'History') {
+                      print('Visitor History: Filtering out doc ${doc.id} - status is "$status" (not "History")');
+                      return false;
+                    }
+                    
+                    // Check if stdID field exists in the document
+                    final hasStdID = data.containsKey('stdID');
+                    final docStdID = data['stdID'] as String?;
+                    
+                    if (studentId == null) {
+                      // From login page: show only visitors WITHOUT stdID field (independent)
+                      // Field should not exist, or be null/empty
+                      return !hasStdID || docStdID == null || (docStdID is String && docStdID.trim().isEmpty);
+                    } else {
+                      // From logged-in student: show only visitors WITH this student's stdID
+                      // Must have stdID field and it must match the student's ID exactly
+                      if (!hasStdID || docStdID == null) return false;
+                      final docStdIDStr = docStdID.toString().trim();
+                      final studentIdStr = studentId.toString().trim();
+                      return docStdIDStr == studentIdStr;
+                    }
+                  }).toList();
+                }
+
+                if (filteredDocs.isEmpty) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(32.0),
@@ -93,14 +127,16 @@ class VisitorHistoryPage extends StatelessWidget {
                 }
 
                 // Debug: Print fetched documents
-                print('Visitor History: Fetched ${snapshot.data!.docs.length} documents');
-                for (var doc in snapshot.data!.docs) {
+                print('Visitor History: Fetched ${filteredDocs.length} documents (studentId: ${studentId ?? "null"})');
+                for (var doc in filteredDocs) {
                   final data = doc.data() as Map<String, dynamic>;
-                  print('  - Doc ID: ${doc.id}, vstStatus: ${data['vstStatus']}, vstQR: ${data['vstQR']}');
+                  final hasStdID = data.containsKey('stdID');
+                  final docStdID = data['stdID'];
+                  print('  - Doc ID: ${doc.id}, vstStatus: ${data['vstStatus']}, vstQR: ${data['vstQR']}, stdID: ${docStdID ?? "NOT SET"} (hasStdID: $hasStdID)');
                 }
 
                 // Sort documents by vstDate (descending - newest first)
-                final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data!.docs);
+                final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(filteredDocs);
                 sortedDocs.sort((a, b) {
                   final aDate = a.data()['vstDate'] as Timestamp?;
                   final bDate = b.data()['vstDate'] as Timestamp?;

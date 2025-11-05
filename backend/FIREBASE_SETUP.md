@@ -49,3 +49,5 @@ The backend needs `serviceAccountKey.json` to update visitor status in Firebase 
 - **Permission denied?** Make sure the service account has Firestore read/write permissions
 - **Backend not starting?** Check that `firebase-admin` package is installed: `pip install firebase-admin==6.5.0`
 
+
+

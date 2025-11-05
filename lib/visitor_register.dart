@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'visitor_confirmation.dart';
 
 class VisitorRegisterPage extends StatefulWidget {
-  const VisitorRegisterPage({super.key});
+  final String? studentId;
+  
+  const VisitorRegisterPage({super.key, this.studentId});
 
   @override
   State<VisitorRegisterPage> createState() => _VisitorRegisterPageState();
@@ -169,7 +171,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        hintText: '01* - ********',
+                        hintText: '*** - ********',
                         hintStyle: TextStyle(color: Colors.grey),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -262,6 +264,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                       contactNumber: _contactNumberController.text,
                       vehicleNumber: _vehicleNumberController.text,
                       visitDate: _visitDateController.text,
+                      studentId: widget.studentId,
                     ),
                   ),
                 );

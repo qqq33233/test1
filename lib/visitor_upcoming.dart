@@ -4,10 +4,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'visitor_qr_code_page.dart';
 
-class VisitorUpcomingPage extends StatelessWidget {
-  VisitorUpcomingPage({super.key});
+class VisitorUpcomingPage extends StatefulWidget {
+  final String? studentId;
+  
+  const VisitorUpcomingPage({super.key, this.studentId});
 
+  @override
+  State<VisitorUpcomingPage> createState() => _VisitorUpcomingPageState();
+}
+
+class _VisitorUpcomingPageState extends State<VisitorUpcomingPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
+
+  Future<void> _refreshData() async {
+    // Force refresh by triggering a rebuild
+    setState(() {});
+    // Wait a bit for Firestore to update
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
 
   Future<void> _deleteVisitor(BuildContext context, String docId) async {
     try {
@@ -16,6 +31,8 @@ class VisitorUpcomingPage extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Visitor deleted successfully')),
         );
+        // Refresh after deletion
+        _refreshData();
       }
     } catch (e) {
       if (context.mounted) {
@@ -56,6 +73,15 @@ class VisitorUpcomingPage extends StatelessWidget {
     }
     
     return visitorData;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh when page becomes visible
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshData();
+    });
   }
 
   @override
@@ -110,12 +136,15 @@ class VisitorUpcomingPage extends StatelessWidget {
 
           // Main Content
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('visitorReservation')
-                  .where('vstStatus', isEqualTo: 'Up Coming')
-                  .snapshots(),
-              builder: (context, snapshot) {
+            child: RefreshIndicator(
+              key: _refreshIndicatorKey,
+              onRefresh: _refreshData,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _firestore
+                    .collection('visitorReservation')
+                    .where('vstStatus', isEqualTo: 'Up Coming')
+                    .snapshots(includeMetadataChanges: false),
+                builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
@@ -130,23 +159,49 @@ class VisitorUpcomingPage extends StatelessWidget {
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: Text(
-                        'No upcoming visitors',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  );
+                // Filter based on studentId and ensure status is still "Up Coming"
+                List<QueryDocumentSnapshot> filteredDocs = [];
+                if (snapshot.hasData) {
+                  filteredDocs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    
+                    // CRITICAL: Double-check status to filter out any documents that may have been updated
+                    final status = data['vstStatus'] as String?;
+                    if (status == null || status.trim() != 'Up Coming') {
+                      print('Visitor Upcoming: Filtering out doc ${doc.id} - status is "$status" (not "Up Coming")');
+                      return false;
+                    }
+                    
+                    // Check if stdID field exists in the document
+                    final hasStdID = data.containsKey('stdID');
+                    final docStdID = data['stdID'] as String?;
+                    
+                    if (widget.studentId == null) {
+                      // From login page: show only visitors WITHOUT stdID field (independent)
+                      // Field should not exist, or be null/empty
+                      return !hasStdID || docStdID == null || (docStdID is String && docStdID.trim().isEmpty);
+                    } else {
+                      // From logged-in student: show only visitors WITH this student's stdID
+                      // Must have stdID field and it must match the student's ID exactly
+                      if (!hasStdID || docStdID == null) return false;
+                      final docStdIDStr = docStdID.toString().trim();
+                      final studentIdStr = widget.studentId.toString().trim();
+                      return docStdIDStr == studentIdStr;
+                    }
+                  }).toList();
+                }
+
+                // Debug: Print filtered documents
+                print('Visitor Upcoming: Total docs: ${snapshot.data?.docs.length ?? 0}, Filtered: ${filteredDocs.length} (studentId: ${widget.studentId ?? "null"})');
+                for (var doc in filteredDocs) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final hasStdID = data.containsKey('stdID');
+                  final docStdID = data['stdID'];
+                  print('  - Doc ID: ${doc.id}, vstStatus: ${data['vstStatus']}, stdID: ${docStdID ?? "NOT SET"} (hasStdID: $hasStdID)');
                 }
 
                 // Sort documents by vstDate (ascending - earliest first)
-                final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data!.docs);
+                final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(filteredDocs);
                 sortedDocs.sort((a, b) {
                   final aDate = a.data()['vstDate'] as Timestamp?;
                   final bDate = b.data()['vstDate'] as Timestamp?;
@@ -170,6 +225,23 @@ class VisitorUpcomingPage extends StatelessWidget {
 
                     final visitorData = visitorSnapshot.data ?? [];
                     
+                    if (sortedDocs.isEmpty) {
+                      return ListView(
+                        padding: const EdgeInsets.all(32.0),
+                        children: const [
+                          Center(
+                            child: Text(
+                              'No upcoming visitors',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    
                     return ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: sortedDocs.length,
@@ -183,6 +255,7 @@ class VisitorUpcomingPage extends StatelessWidget {
                 );
               },
             ),
+          ),
           ),
         ],
       ),

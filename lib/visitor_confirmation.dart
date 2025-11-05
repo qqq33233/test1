@@ -10,6 +10,7 @@ class VisitorConfirmationPage extends StatefulWidget {
   final String contactNumber;
   final String vehicleNumber;
   final String visitDate;
+  final String? studentId;
 
   const VisitorConfirmationPage({
     super.key,
@@ -17,6 +18,7 @@ class VisitorConfirmationPage extends StatefulWidget {
     required this.contactNumber,
     required this.vehicleNumber,
     required this.visitDate,
+    this.studentId,
   });
 
   @override
@@ -260,8 +262,8 @@ class _VisitorConfirmationPageState extends State<VisitorConfirmationPage> {
       // Generate QR code data (using vstRsvtID as unique identifier)
       final qrCodeData = vstRsvtID;
 
-      // Save to visitorReservation collection
-      final reservationDoc = await reservationRef.add({
+      // Prepare reservation data
+      final reservationData = <String, dynamic>{
         'vstRsvtID': vstRsvtID,
         'vstID': vstID,
         'vstDate': Timestamp.fromDate(visitDateTime),
@@ -269,7 +271,25 @@ class _VisitorConfirmationPageState extends State<VisitorConfirmationPage> {
         'endTime': Timestamp.fromDate(endTime),
         'vstStatus': 'Up Coming',
         'vstQR': qrCodeData,
-      });
+      };
+      
+      // Add student ID if visitor is created by a logged-in student
+      if (widget.studentId != null && widget.studentId!.trim().isNotEmpty) {
+        reservationData['stdID'] = widget.studentId!.trim();
+        print('DEBUG: Adding stdID to reservation: ${widget.studentId!.trim()}');
+      } else {
+        print('DEBUG: No stdID added - studentId is: ${widget.studentId}');
+      }
+
+      print('DEBUG: Reservation data before saving: $reservationData');
+
+      // Save to visitorReservation collection
+      final reservationDoc = await reservationRef.add(reservationData);
+      
+      print('DEBUG: Reservation saved with document ID: ${reservationDoc.id}');
+      print('DEBUG: Verifying saved data...');
+      final savedData = (await reservationDoc.get()).data();
+      print('DEBUG: Saved data includes stdID: ${savedData?['stdID']}');
 
       // Update the QR code field with the document ID for reference
       await reservationDoc.update({'vstQR': qrCodeData});

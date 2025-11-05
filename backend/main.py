@@ -1900,11 +1900,13 @@ async def process_visitor_qr(qr_code: str):
                 doc_data = doc.to_dict()
                 print(f"[Visitor QR] Found document ID: {doc.id}")
                 print(f"[Visitor QR] Current vstStatus: {doc_data.get('vstStatus', 'N/A')}")
+                print(f"[Visitor QR] Document stdID: {doc_data.get('stdID', 'NOT SET')}")
                 print(f"[Visitor QR] Document data: {doc_data}")
                 
                 # Update status to "History"
                 doc.reference.update({'vstStatus': 'History'})
                 print(f"[Visitor QR] Successfully updated visitor reservation {doc.id} to History")
+                print(f"[Visitor QR] Updated document - stdID: {doc_data.get('stdID', 'NOT SET')}, vstStatus: History")
                 updated = True
                 break
             

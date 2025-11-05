@@ -5,7 +5,9 @@ import 'visitor_upcoming.dart';
 import 'visitor_history.dart';
 
 class VisitorPage extends StatelessWidget {
-  const VisitorPage({super.key});
+  final String? studentId;
+  
+  const VisitorPage({super.key, this.studentId});
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +99,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const VisitorRegisterPage(),
+                                builder: (context) => VisitorRegisterPage(studentId: studentId),
                               ),
                             );
                           },
@@ -109,7 +111,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => VisitorUpcomingPage(),
+                                builder: (context) => VisitorUpcomingPage(studentId: studentId),
                               ),
                             );
                           },
@@ -121,7 +123,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const VisitorHistoryPage(),
+                                builder: (context) => VisitorHistoryPage(studentId: studentId),
                               ),
                             );
                           },
