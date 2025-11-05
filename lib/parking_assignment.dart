@@ -123,7 +123,7 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
           },
         ),
         title: const Text(
-          'Parking Assignment',
+          'Parking',
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,
@@ -483,7 +483,6 @@ class ParkingDisplayPage extends StatefulWidget {
 
 class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
   int? availableSlots;
-  String? assignedParkingNumber;
   bool isLoading = true;
   bool isReserving = false;
 
@@ -493,41 +492,151 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
     _loadParkingData();
   }
 
+  // Backend URL - Change this to your computer's IP address
+  // For Android Emulator: use 10.0.2.2 instead of localhost
+  // For real device: use your computer's IP (e.g., 192.168.1.100)
+  // Find your IP: Windows: ipconfig, Mac/Linux: ifconfig
+  static const String _backendUrl = 'http://10.0.2.2:5000';  // For Android emulator
+  // static const String _backendUrl = 'http://192.168.1.XXX:5000';  // For real device, replace XXX with your IP
+
   Future<void> _loadParkingData() async {
     try {
       // Get parking availability
       final availabilityResponse = await http.get(
-        Uri.parse('http://localhost:5000/api/parking/availability/${Uri.encodeComponent(widget.selectedArea)}'),
+        Uri.parse('$_backendUrl/api/parking/availability/${Uri.encodeComponent(widget.selectedArea)}'),
       );
       
       if (availabilityResponse.statusCode == 200) {
-        final availabilityData = json.decode(availabilityResponse.body);
-        if (availabilityData['success']) {
-          setState(() {
-            availableSlots = availabilityData['available_slots'];
-          });
+        final responseBody = availabilityResponse.body;
+        print('DEBUG: Raw response body: $responseBody');
+        
+        final availabilityData = json.decode(responseBody) as Map<String, dynamic>;
+        
+        // Debug: Print what we received from backend
+        print('DEBUG: Parsed response: $availabilityData');
+        print('DEBUG: Response keys: ${availabilityData.keys.toList()}');
+        
+        // Check if request was successful
+        if (availabilityData['success'] == false) {
+          final errorMsg = availabilityData['error'] ?? availabilityData['message'] ?? 'Failed to load parking availability';
+          // Show helpful message if Confirm hasn't been clicked
+          if (errorMsg.contains('Confirm') || errorMsg.contains('click')) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ Please click "Confirm" button on backend console first, then refresh!'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+          throw Exception(errorMsg);
         }
-      }
-      
-      // Assign parking spot
-      final assignResponse = await http.post(
-        Uri.parse('http://localhost:5000/api/parking/assign'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'area': widget.selectedArea}),
-      );
-      
-      if (assignResponse.statusCode == 200) {
-        final assignData = json.decode(assignResponse.body);
-        if (assignData['success']) {
-          setState(() {
-            assignedParkingNumber = assignData['assigned_spot'];
-            isLoading = false;
-          });
-        } else {
-          throw Exception(assignData['error']);
-        }
+        
+        setState(() {
+          // Backend returns "empty" - map it to "available" in frontend
+          // Try empty first, then available, then available_slots
+          // IMPORTANT: Make sure we're NOT using "total" which is the total number of spots
+          final emptyValue = availabilityData['empty'];
+          final availableValue = availabilityData['available'];
+          final availableSlotsValue = availabilityData['available_slots'];
+          final totalValue = availabilityData['total']; // DO NOT USE THIS FOR AVAILABLE COUNT
+          
+          // Debug: Print the values we're extracting with types
+          print('DEBUG: empty=$emptyValue (type: ${emptyValue.runtimeType})');
+          print('DEBUG: available=$availableValue (type: ${availableValue.runtimeType})');
+          print('DEBUG: available_slots=$availableSlotsValue (type: ${availableSlotsValue.runtimeType})');
+          print('DEBUG: total=$totalValue (type: ${totalValue.runtimeType}) - DO NOT USE THIS!');
+          
+          // CRITICAL: Only use empty/available, NEVER total
+          int? parsedEmpty;
+          int? parsedAvailable;
+          int? parsedAvailableSlots;
+          
+          // Parse empty value
+          if (emptyValue != null) {
+            if (emptyValue is int) {
+              parsedEmpty = emptyValue;
+            } else if (emptyValue is String) {
+              parsedEmpty = int.tryParse(emptyValue);
+            } else if (emptyValue is double) {
+              parsedEmpty = emptyValue.toInt();
+            } else {
+              parsedEmpty = int.tryParse(emptyValue.toString());
+            }
+            print('DEBUG: Parsed empty=$parsedEmpty');
+          }
+          
+          // Parse available value
+          if (availableValue != null) {
+            if (availableValue is int) {
+              parsedAvailable = availableValue;
+            } else if (availableValue is String) {
+              parsedAvailable = int.tryParse(availableValue);
+            } else if (availableValue is double) {
+              parsedAvailable = availableValue.toInt();
+            } else {
+              parsedAvailable = int.tryParse(availableValue.toString());
+            }
+            print('DEBUG: Parsed available=$parsedAvailable');
+          }
+          
+          // Priority: empty > available > available_slots (NEVER total)
+          if (parsedEmpty != null) {
+            availableSlots = parsedEmpty;
+            print('DEBUG: Using parsedEmpty: $availableSlots');
+          } else if (parsedAvailable != null) {
+            availableSlots = parsedAvailable;
+            print('DEBUG: Using parsedAvailable: $availableSlots');
+          } else if (availableSlotsValue != null) {
+            if (availableSlotsValue is int) {
+              availableSlots = availableSlotsValue;
+            } else if (availableSlotsValue is String) {
+              availableSlots = int.tryParse(availableSlotsValue);
+            } else {
+              availableSlots = int.tryParse(availableSlotsValue.toString());
+            }
+            print('DEBUG: Using availableSlotsValue: $availableSlots');
+          } else {
+            availableSlots = null;
+            print('DEBUG: ERROR - No empty/available value found in response!');
+          }
+          
+          // CRITICAL SAFETY CHECK: If availableSlots equals total, it's WRONG!
+          if (availableSlots != null && totalValue != null) {
+            int? parsedTotal;
+            if (totalValue is int) {
+              parsedTotal = totalValue;
+            } else if (totalValue is String) {
+              parsedTotal = int.tryParse(totalValue);
+            } else {
+              parsedTotal = int.tryParse(totalValue.toString());
+            }
+            
+            if (parsedTotal != null && availableSlots == parsedTotal) {
+              print('DEBUG: ERROR - availableSlots ($availableSlots) equals total ($parsedTotal)! This is WRONG!');
+              print('DEBUG: Forcing to use empty value instead...');
+              // Force use empty value
+              if (parsedEmpty != null) {
+                availableSlots = parsedEmpty;
+                print('DEBUG: Fixed to use empty: $availableSlots');
+              } else {
+                availableSlots = 0; // Default to 0 if we can't determine
+                print('DEBUG: WARNING - Set to 0 as fallback');
+              }
+            }
+          }
+          
+          // Debug: Print the final value we're displaying
+          print('DEBUG: ==========================================');
+          print('DEBUG: FINAL availableSlots value to display: $availableSlots');
+          print('DEBUG: ==========================================');
+          isLoading = false;
+        });
       } else {
-        throw Exception('Failed to assign parking spot');
+        setState(() {
+          isLoading = false;
+        });
+        throw Exception('HTTP ${availabilityResponse.statusCode}: Failed to load parking availability');
       }
     } catch (e) {
       setState(() {
@@ -548,30 +657,46 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
     });
 
     try {
-      // Reserve parking spot
+      // Reserve parking spot and get updated availability
       final response = await http.post(
-        Uri.parse('http://localhost:5000/api/parking/reserve'),
+        Uri.parse('$_backendUrl/api/parking/reserve'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'area': widget.selectedArea,
-          'spot_number': assignedParkingNumber,
+          'spot_number': '',  // Not needed anymore, but backend might expect it
         }),
       );
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
+          // Backend returns "empty" - map it to "available" in frontend
+          // Make sure we're using empty/available, NOT total
+          setState(() {
+            final emptyValue = data['empty'];
+            final availableValue = data['available'];
+            
+            if (emptyValue != null) {
+              availableSlots = emptyValue is int ? emptyValue : int.tryParse(emptyValue.toString()) ?? 0;
+            } else if (availableValue != null) {
+              availableSlots = availableValue is int ? availableValue : int.tryParse(availableValue.toString()) ?? 0;
+            } else {
+              availableSlots = 0;
+            }
+          });
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(data['message']),
+              content: Text('Reserved! Available parking: ${availableSlots}'),
               backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
             ),
           );
           
-          // Navigate back to parking assignment page
-          Navigator.pop(context);
+          // Don't navigate back - stay on page to show updated count
+          // Navigator.pop(context);
         } else {
-          throw Exception(data['error']);
+          throw Exception(data['error'] ?? 'Unknown error');
         }
       } else {
         throw Exception('Failed to reserve parking spot');
@@ -631,7 +756,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
           },
         ),
         title: const Text(
-          'Parking Display & Booking',
+          'Parking Display and Booking',
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,
@@ -673,7 +798,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                   
                   const SizedBox(height: 24),
                   
-                  // Available Parking Slots
+                  // Available Parking Slots with Refresh Button
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -701,55 +826,26 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Text(
-                          '$availableSlots',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4E6691),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Assigned Parking Number
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Parking Spot Number Assign:',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          assignedParkingNumber ?? 'N/A',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4E6691),
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              availableSlots != null ? '$availableSlots' : '-',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF4E6691),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              color: const Color(0xFF4E6691),
+                              onPressed: isLoading ? null : () {
+                                _loadParkingData();
+                              },
+                              tooltip: 'Refresh parking data',
+                            ),
+                          ],
                         ),
                       ],
                     ),

@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'parking_assignment.dart';
 import 'parking_status.dart';
 import 'visitor.dart';
+import 'profile.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String studentId;
+  
+  const HomePage({super.key, required this.studentId});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -179,7 +182,7 @@ class _HomePageState extends State<HomePage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const ParkingStatus(),
+                                  builder: (context) => ParkingStatus(studentId: widget.studentId),
                                 ),
                               );
                             } else if (function['label'] == 'Visitor') {
@@ -189,7 +192,13 @@ class _HomePageState extends State<HomePage> {
                                   builder: (context) => const VisitorPage(),
                                 ),
                               );
-                            } else {
+                            }else if (function['label'] == 'Profile') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const ProfilePage()),
+                              );
+                            }
+                             else {
                               print('Tapped ${function['label']}');
                             }
                           },
@@ -301,6 +310,16 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _selectedIndex = index;
         });
+        
+        // Navigate to Profile page when Profile button is clicked
+        if (label == 'Profile') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfilePage(studentId: widget.studentId),
+            ),
+          );
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),

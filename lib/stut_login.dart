@@ -22,10 +22,16 @@ class _StutLoginState extends State<StutLogin> {
   }
 
   void _handleLogin() {
-    // Navigate directly to home page
+    // Store student ID (hardcoded to 2409223 as per requirement)
+    // In a real app, you would validate credentials and get student ID from database
+    const String studentId = '2409223';
+    
+    // Navigate to home page with student ID
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
+      MaterialPageRoute(
+        builder: (context) => HomePage(studentId: studentId),
+      ),
     );
   }
 
