@@ -42,7 +42,7 @@ class _ProfilePageState extends State<ProfilePage> {
               color: Color(0xFF4E6691),
             ),
             child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 Text(
                   'My Profile',
@@ -63,47 +63,46 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Student Details Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                  // Student Details Title - Outside the box
+                  const Text(
+                    'Student Details',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title
-                        const Text(
-                          'Student Details',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
+                  ),
+                  const SizedBox(height: 16),
 
-                        // Profile Image - Centered
-                        Center(
-                          child: CircleAvatar(
-                            radius: 50,
-                            backgroundColor: Colors.grey[300],
-                            backgroundImage: const AssetImage('assets/profile.png'),
-                            onBackgroundImageError: (exception, stackTrace) {
-                              // Fallback if image doesn't load
-                            },
-                          ),
+                  // Stack to overlap profile photo with card
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.topCenter,
+                    children: [
+                      // Student Details Card
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 50), // Push card down so top edge is at middle of photo
+                        padding: const EdgeInsets.only(
+                          top: 64, // Space for overlapping photo (50 radius + 14 padding)
+                          left: 24,
+                          right: 24,
+                          bottom: 24,
                         ),
-                        const SizedBox(height: 24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
 
                         // Full Name and Student ID - Side by side
                         Row(
@@ -126,8 +125,23 @@ class _ProfilePageState extends State<ProfilePage> {
 
                         // Email - Full width
                         const _InfoText(title: 'Email', value: 'limjq-wm22@student.tarc.my'),
-                      ],
-                    ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Profile Image - Positioned to overlap card
+                      Positioned(
+                        top: 0, // Position at top of stack
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.grey[300],
+                          backgroundImage: const AssetImage('assets/profile.png'),
+                          onBackgroundImageError: (exception, stackTrace) {
+                            // Fallback if image doesn't load
+                          },
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 24),
@@ -217,34 +231,37 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
       // Floating Scan Button
-      floatingActionButton: Container(
-        width: 80,
-        height: 80,
-        decoration: const BoxDecoration(
-          color: Color(0xFF4E6691),
-          shape: BoxShape.circle,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(40),
-            onTap: () {
-              // Handle scan button tap
-            },
-            child: Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE9F4FF),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/scan_logo.png',
-                    width: 28,
-                    height: 28,
-                    fit: BoxFit.contain,
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 12), // Move button down (positive Y = down)
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: const BoxDecoration(
+            color: Color(0xFF4E6691),
+            shape: BoxShape.circle,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(40),
+              onTap: () {
+                // Handle scan button tap
+              },
+              child: Center(
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE9F4FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/scan_logo.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),

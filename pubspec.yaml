@@ -41,6 +41,7 @@ dependencies:
   latlong2: ^0.9.1
   http: ^1.1.0
   qr_flutter: ^4.1.0
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
@@ -83,6 +84,7 @@ flutter:
     - assets/profile.png
     - assets/visitor_history_logo.png
     - assets/visitor_upcoming_logo.png
+    - assets/dashboard_1.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

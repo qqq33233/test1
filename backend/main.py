@@ -11,6 +11,42 @@ import time
 import json
 import os
 
+# Firebase Admin SDK
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    print("Warning: firebase-admin not installed. QR code scanning will not update Firebase.")
+
+# ZBar QR Code Scanner (lazy import to avoid DLL loading errors on Windows)
+ZBAR_AVAILABLE = False
+
+def _try_load_zbar():
+    """Try to load ZBar decoder, returns decode function or None."""
+    try:
+        # Try importing the module first
+        import pyzbar
+        # Then try to import decode
+        from pyzbar.pyzbar import decode
+        # Test by checking if decode is callable
+        if callable(decode):
+            return decode, True
+        return None, False
+    except (ImportError, OSError, FileNotFoundError, AttributeError, Exception) as e:
+        # Catch any exception including DLL loading errors
+        print(f"ZBar import failed: {type(e).__name__}: {str(e)[:100]}")
+        return None, False
+
+# Try to load ZBar
+ZBAR_DECODE, ZBAR_AVAILABLE = _try_load_zbar()
+if ZBAR_AVAILABLE:
+    print("ZBar QR code scanner available")
+else:
+    print("Warning: pyzbar not available. QR code detection will use OpenCV fallback.")
+    print("To enable ZBar on Windows, install ZBar DLL from: https://github.com/mchehab/zbar")
+
 app = FastAPI()
 
 # Enable CORS for Flutter app
@@ -111,6 +147,24 @@ def load_area_configs():
 
 # Load configurations on startup
 load_area_configs()
+
+# Initialize Firebase Admin SDK (if available)
+firestore_db = None
+if FIREBASE_AVAILABLE:
+    try:
+        # Try to initialize with service account key if exists
+        service_account_path = os.path.join(os.path.dirname(__file__), 'serviceAccountKey.json')
+        if os.path.exists(service_account_path):
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred)
+            firestore_db = firestore.client()
+            print("Firebase Admin SDK initialized successfully")
+        else:
+            print("Warning: serviceAccountKey.json not found. Firebase updates will be disabled.")
+            print("To enable Firebase updates, download service account key from Firebase Console")
+    except Exception as e:
+        print(f"Error initializing Firebase: {e}")
+        FIREBASE_AVAILABLE = False
 
 def get_parking_spaces_for_area(area_name: str):
     """Get parking spaces configuration for a specific area."""
@@ -1039,7 +1093,7 @@ def index():
                             <path d="M35 65 Q35 55 50 55 Q65 55 65 65" stroke="#1976d2" stroke-width="3" fill="none" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <div class="module-title">Visitor QR code Detector</div>
+                    <div class="module-title">QR Code Detector</div>
                 </a>
                 <a href="/car-plate" class="module-card">
                     <div class="module-icon">
@@ -1326,9 +1380,149 @@ def console():
     """
 
 
+# === Visitor QR Code Detection Variables ===
+visitor_qr_camera = None
+visitor_qr_camera_index = None
+visitor_qr_camera_lock = threading.Lock()
+scanned_qr_codes = {}  # Store scanned QR codes to prevent duplicate processing
+scanned_qr_lock = threading.Lock()
+
+def init_visitor_qr_camera():
+    """Initialize camera for visitor QR code scanning."""
+    global visitor_qr_camera, visitor_qr_camera_index
+    # Try to use same camera as parking detection, or try different index
+    for idx in [0, 1, 2]:
+        try:
+            test_cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if test_cap.isOpened():
+                ret, _ = test_cap.read()
+                if ret:
+                    test_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                    test_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    visitor_qr_camera = test_cap
+                    visitor_qr_camera_index = idx
+                    print(f"Visitor QR camera connected (index: {idx})")
+                    return True
+                test_cap.release()
+        except Exception as e:
+            print(f"Error testing camera {idx}: {e}")
+            continue
+    print("Warning: Could not initialize visitor QR camera")
+    return False
+
+# Initialize visitor QR camera
+init_visitor_qr_camera()
+
+def detect_qr_code(frame):
+    """Detect QR codes in frame using ZBar (pyzbar) as primary, OpenCV as fallback."""
+    try:
+        # Try ZBar first (more accurate)
+        if ZBAR_AVAILABLE and ZBAR_DECODE is not None:
+            try:
+                # Convert BGR to RGB for pyzbar
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                decoded_objects = ZBAR_DECODE(rgb_frame)
+                
+                if decoded_objects:
+                    # Return first QR code found
+                    qr_data = decoded_objects[0].data.decode('utf-8')
+                    # Get bounding box points
+                    points = decoded_objects[0].polygon
+                    if points:
+                        # Convert to numpy array format
+                        pts = np.array([(p.x, p.y) for p in points], dtype=np.int32)
+                        return qr_data, pts
+                    return qr_data, None
+            except Exception as zbar_error:
+                print(f"ZBar detection error: {zbar_error}, falling back to OpenCV")
+        
+        # Fallback to OpenCV QRCodeDetector
+        detector = cv2.QRCodeDetector()
+        retval, decoded_info, points, straight_qrcode = detector.detectAndDecodeMulti(frame)
+        
+        if retval and decoded_info:
+            # Return first detected QR code
+            for i, data in enumerate(decoded_info):
+                if data:  # Non-empty QR code data
+                    return data, points[i] if points is not None and i < len(points) else None
+        return None, None
+    except Exception as e:
+        print(f"Error detecting QR code: {e}")
+        traceback.print_exc()
+        return None, None
+
+def generate_visitor_qr_frames():
+    """Generate video stream with QR code detection overlay."""
+    if visitor_qr_camera is None or not visitor_qr_camera.isOpened():
+        error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(error_frame, "Camera not connected!", (50, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', error_frame)
+        if ret:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        return
+    
+    while True:
+        try:
+            with visitor_qr_camera_lock:
+                if visitor_qr_camera is None or not visitor_qr_camera.isOpened():
+                    break
+                success, frame = visitor_qr_camera.read()
+                if not success or frame is None:
+                    break
+                
+                # Crop out iVCam logo if present
+                if frame.shape[0] > 100:
+                    frame = frame[60:-40, :]
+                
+                # Resize for display
+                display_frame = cv2.resize(frame.copy(), (960, 540))
+                
+                # Detect QR code
+                qr_data, qr_points = detect_qr_code(frame)
+                
+                if qr_data:
+                    # Draw QR code bounding box
+                    if qr_points is not None:
+                        pts = qr_points.astype(int)
+                        # Scale points to display size
+                        scale_x = 960 / frame.shape[1]
+                        scale_y = 540 / frame.shape[0]
+                        pts_scaled = (pts * [scale_x, scale_y]).astype(int)
+                        cv2.polylines(display_frame, [pts_scaled], True, (0, 255, 0), 3)
+                    
+                    # Display QR code data
+                    cv2.putText(display_frame, f"QR: {qr_data}", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    
+                    # Update last scanned QR for API access (detection only, no auto-processing)
+                    current_time = time.time()
+                    with scanned_qr_lock:
+                        if qr_data not in scanned_qr_codes or (current_time - scanned_qr_codes[qr_data]) > 5:
+                            # New QR code or old one (>5 seconds), update for display
+                            scanned_qr_codes[qr_data] = current_time
+                            # Update last scanned QR for API access
+                            with last_scanned_qr_lock:
+                                global last_scanned_qr, last_scanned_qr_time
+                                last_scanned_qr = qr_data
+                                last_scanned_qr_time = current_time
+            
+            # Encode frame
+            ret, buffer = cv2.imencode('.jpg', display_frame)
+            if not ret:
+                continue
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            
+            time.sleep(0.033)  # ~30 FPS
+        except Exception as e:
+            print(f"Error in visitor QR frame generation: {e}")
+            break
+
 @app.get("/visitor-qr", response_class=HTMLResponse)
 def visitor_qr():
-    """Visitor QR code Detector placeholder page."""
+    """Visitor QR code Detector page."""
     return """
     <!DOCTYPE html>
     <html lang="en">
@@ -1340,31 +1534,55 @@ def visitor_qr():
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: #f5f5f5;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
                 margin: 0;
+                padding: 20px;
             }
             .container {
-                text-align: center;
+                max-width: 1200px;
+                margin: 0 auto;
                 background: white;
-                padding: 60px;
-                border-radius: 16px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
             h1 {
                 color: #1976d2;
                 margin-bottom: 20px;
             }
-            p {
-                color: #666;
-                margin-bottom: 30px;
+            .video-container {
+                text-align: center;
+                margin: 20px 0;
+            }
+            .video-stream {
+                max-width: 100%;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+            }
+            .controls {
+                margin: 20px 0;
+                text-align: center;
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 4px;
+                background: #e3f2fd;
+                color: #1976d2;
+            }
+            .scan-success {
+                background: #c8e6c9;
+                color: #2e7d32;
+            }
+            .scan-error {
+                background: #ffcdd2;
+                color: #c62828;
             }
             a {
                 color: #1976d2;
                 text-decoration: none;
                 font-weight: 600;
+                display: inline-block;
+                margin-top: 20px;
             }
             a:hover {
                 text-decoration: underline;
@@ -1374,9 +1592,105 @@ def visitor_qr():
     <body>
         <div class="container">
             <h1>Visitor QR Code Detector</h1>
-            <p>This module is coming soon.</p>
+            <div class="video-container">
+                <img src="/visitor_qr_video_feed" class="video-stream" alt="QR Code Scanner">
+            </div>
+            <div id="status" class="status">Point camera at QR code to scan...</div>
+            <div class="controls">
+                <button id="approveBtn" onclick="approveVisitor()" style="padding: 10px 20px; font-size: 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Approve</button>
+                <button onclick="checkQRStatus()" style="padding: 10px 20px; font-size: 16px; background: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;">Check Status</button>
+            </div>
             <a href="/">← Back to Console</a>
         </div>
+        <script>
+            let lastCheckTime = 0;
+            function checkQRStatus() {
+                fetch('/api/visitor/check-scan')
+                    .then(response => response.json())
+                    .then(data => {
+                        const statusDiv = document.getElementById('status');
+                        const approveBtn = document.getElementById('approveBtn');
+                        if (data.success && data.scanned) {
+                            statusDiv.textContent = 'QR Code detected: ' + data.qr_code + ' - Ready for approval';
+                            statusDiv.className = 'status scan-success';
+                            approveBtn.disabled = false;
+                            approveBtn.style.background = '#1976d2';
+                            approveBtn.style.cursor = 'pointer';
+                        } else {
+                            statusDiv.textContent = 'No QR code detected. Point camera at QR code.';
+                            statusDiv.className = 'status';
+                            approveBtn.disabled = true;
+                            approveBtn.style.background = '#9e9e9e';
+                            approveBtn.style.cursor = 'not-allowed';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            }
+            
+            function approveVisitor() {
+                const approveBtn = document.getElementById('approveBtn');
+                const statusDiv = document.getElementById('status');
+                
+                // Disable button during processing
+                approveBtn.disabled = true;
+                approveBtn.style.background = '#9e9e9e';
+                approveBtn.textContent = 'Processing...';
+                
+                fetch('/api/visitor/check-scan')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.scanned && data.qr_code) {
+                            // Approve the visitor
+                            return fetch('/api/visitor/approve', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ qr_code: data.qr_code })
+                            });
+                        } else {
+                            throw new Error('No QR code detected. Please scan a QR code first.');
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        const statusDiv = document.getElementById('status');
+                        if (result.success) {
+                            statusDiv.textContent = 'Visitor approved successfully! ' + result.qr_code + ' - Status updated to History.';
+                            statusDiv.className = 'status scan-success';
+                            // Reset button after 2 seconds
+                            setTimeout(() => {
+                                approveBtn.disabled = false;
+                                approveBtn.style.background = '#1976d2';
+                                approveBtn.style.cursor = 'pointer';
+                                approveBtn.textContent = 'Approve';
+                            }, 2000);
+                        } else {
+                            statusDiv.textContent = 'Error: ' + (result.message || result.error || 'Failed to approve visitor');
+                            statusDiv.className = 'status scan-error';
+                            approveBtn.disabled = false;
+                            approveBtn.style.background = '#1976d2';
+                            approveBtn.style.cursor = 'pointer';
+                            approveBtn.textContent = 'Approve';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        const statusDiv = document.getElementById('status');
+                        statusDiv.textContent = 'Error: ' + error.message;
+                        statusDiv.className = 'status scan-error';
+                        approveBtn.disabled = false;
+                        approveBtn.style.background = '#1976d2';
+                        approveBtn.style.cursor = 'pointer';
+                        approveBtn.textContent = 'Approve';
+                    });
+            }
+            
+            // Auto-check every 2 seconds
+            setInterval(checkQRStatus, 2000);
+        </script>
     </body>
     </html>
     """
@@ -1443,3 +1757,182 @@ def video_feed():
     """MJPEG video stream route."""
     return StreamingResponse(generate_frames(),
                              media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/visitor_qr_video_feed")
+def visitor_qr_video_feed():
+    """MJPEG video stream route for visitor QR code scanning."""
+    return StreamingResponse(generate_visitor_qr_frames(),
+                             media_type="multipart/x-mixed-replace; boundary=frame")
+
+# Store last scanned QR code for API access
+last_scanned_qr = None
+last_scanned_qr_time = 0
+last_scanned_qr_lock = threading.Lock()
+
+@app.post("/api/visitor/scan-qr")
+async def scan_visitor_qr(request: Request):
+    """Manually trigger QR code scan and process."""
+    try:
+        data = await request.json()
+        qr_code = data.get('qr_code')
+        
+        if not qr_code:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "QR code is required"}
+            )
+        
+        # Process the QR code
+        result = await process_visitor_qr(qr_code)
+        return JSONResponse(content=result)
+    except Exception as e:
+        print(f"Error in scan_visitor_qr: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.get("/api/visitor/check-scan")
+async def check_visitor_scan():
+    """Check the latest scanned QR code."""
+    try:
+        with last_scanned_qr_lock:
+            current_time = time.time()
+            # Only return QR codes scanned in the last 30 seconds (extended for manual approval)
+            if last_scanned_qr and (current_time - last_scanned_qr_time) < 30:
+                return JSONResponse(content={
+                    "success": True,
+                    "scanned": True,
+                    "qr_code": last_scanned_qr,
+                    "message": "QR code detected"
+                })
+            return JSONResponse(content={
+                "success": True,
+                "scanned": False,
+                "message": "No QR code detected"
+            })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.post("/api/visitor/approve")
+async def approve_visitor(request: Request):
+    """Approve visitor entry and update status to History."""
+    try:
+        data = await request.json()
+        qr_code = data.get('qr_code')
+        
+        if not qr_code:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "QR code is required"}
+            )
+        
+        # Process the QR code (update Firebase status to History)
+        result = await process_visitor_qr(qr_code)
+        
+        if result.get("success"):
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Visitor {qr_code} approved successfully. Status updated to History.",
+                "qr_code": qr_code
+            })
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": result.get("message") or result.get("error") or "Failed to approve visitor",
+                    "qr_code": qr_code
+                }
+            )
+    except Exception as e:
+        print(f"Error in approve_visitor: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+async def process_visitor_qr(qr_code: str):
+    """Process scanned QR code and update visitor status to History."""
+    try:
+        print(f"[Visitor QR] Processing QR code: {qr_code}")
+        
+        # Update last scanned QR
+        with last_scanned_qr_lock:
+            global last_scanned_qr, last_scanned_qr_time
+            last_scanned_qr = qr_code
+            last_scanned_qr_time = time.time()
+        
+        # Update Firebase if available
+        if firestore_db is None:
+            print(f"[Visitor QR] Firebase not available. QR code {qr_code} detected but not updated.")
+            return {
+                "success": False,
+                "message": f"QR code {qr_code} detected. (Firebase update disabled - install serviceAccountKey.json)",
+                "qr_code": qr_code
+            }
+        
+        try:
+            # Find visitor reservation by vstQR
+            print(f"[Visitor QR] Searching for visitor reservation with vstQR: {qr_code}")
+            reservations_ref = firestore_db.collection('visitorReservation')
+            query = reservations_ref.where('vstQR', '==', qr_code).limit(1)
+            
+            # Use get() instead of stream() for simpler synchronous access
+            docs = query.get()
+            
+            print(f"[Visitor QR] Found {len(docs)} document(s) matching vstQR: {qr_code}")
+            
+            if len(docs) == 0:
+                # Also try searching by vstRsvtID in case the field name is different
+                print(f"[Visitor QR] Trying alternative search by vstRsvtID...")
+                query2 = reservations_ref.where('vstRsvtID', '==', qr_code).limit(1)
+                docs = query2.get()
+                print(f"[Visitor QR] Found {len(docs)} document(s) matching vstRsvtID: {qr_code}")
+            
+            updated = False
+            for doc in docs:
+                doc_data = doc.to_dict()
+                print(f"[Visitor QR] Found document ID: {doc.id}")
+                print(f"[Visitor QR] Current vstStatus: {doc_data.get('vstStatus', 'N/A')}")
+                print(f"[Visitor QR] Document data: {doc_data}")
+                
+                # Update status to "History"
+                doc.reference.update({'vstStatus': 'History'})
+                print(f"[Visitor QR] Successfully updated visitor reservation {doc.id} to History")
+                updated = True
+                break
+            
+            if updated:
+                return {
+                    "success": True,
+                    "message": f"QR code {qr_code} scanned successfully. Visitor status updated to History.",
+                    "qr_code": qr_code
+                }
+            else:
+                print(f"[Visitor QR] ERROR: No document found with vstQR or vstRsvtID matching: {qr_code}")
+                return {
+                    "success": False,
+                    "message": f"QR code {qr_code} not found in visitor reservations. Please check the QR code value.",
+                    "qr_code": qr_code
+                }
+        except Exception as firebase_error:
+            print(f"[Visitor QR] Firebase update error: {firebase_error}")
+            traceback.print_exc()
+            return {
+                "success": False,
+                "error": f"Firebase update failed: {str(firebase_error)}",
+                "qr_code": qr_code
+            }
+    except Exception as e:
+        print(f"[Visitor QR] Error processing visitor QR: {e}")
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }

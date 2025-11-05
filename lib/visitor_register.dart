@@ -10,10 +10,18 @@ class VisitorRegisterPage extends StatefulWidget {
 }
 
 class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
-  final TextEditingController _visitorNameController = TextEditingController(text: 'Lim Jia Jia');
-  final TextEditingController _contactNumberController = TextEditingController(text: '012-32333333');
-  final TextEditingController _vehicleNumberController = TextEditingController(text: 'ABC1234');
-  final TextEditingController _visitDateController = TextEditingController(text: 'Monday, 11 Aug 2025');
+  final TextEditingController _visitorNameController = TextEditingController();
+  final TextEditingController _contactNumberController = TextEditingController();
+  final TextEditingController _vehicleNumberController = TextEditingController();
+  late final TextEditingController _visitDateController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize date with current system date
+    final currentDate = DateTime.now();
+    _visitDateController = TextEditingController(text: _formatDate(currentDate));
+  }
 
   @override
   void dispose() {
@@ -123,7 +131,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: const Color(0xFFF7F7F7),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: TextField(
@@ -131,6 +139,8 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        hintText: 'name',
+                        hintStyle: TextStyle(color: Colors.grey),
                       ),
                       style: const TextStyle(fontSize: 16),
                     ),
@@ -150,7 +160,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: const Color(0xFFF7F7F7),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: TextField(
@@ -159,6 +169,8 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        hintText: '01* - ********',
+                        hintStyle: TextStyle(color: Colors.grey),
                       ),
                       style: const TextStyle(fontSize: 16),
                     ),
@@ -178,7 +190,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: const Color(0xFFF7F7F7),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: TextField(
@@ -186,6 +198,8 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        hintText: 'ABC 1234',
+                        hintStyle: TextStyle(color: Colors.grey),
                       ),
                       style: const TextStyle(fontSize: 16),
                     ),
@@ -207,7 +221,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                     onTap: _selectDate,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey[200],
+                        color: const Color(0xFFF7F7F7),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: TextField(

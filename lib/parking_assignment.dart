@@ -3,9 +3,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'parking_reservation.dart';
 
 class ParkingAssignment extends StatefulWidget {
-  const ParkingAssignment({super.key});
+  final String studentId;
+  
+  const ParkingAssignment({super.key, required this.studentId});
 
   @override
   State<ParkingAssignment> createState() => _ParkingAssignmentState();
@@ -205,15 +209,15 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Refresh Button
+                // History Button
                 FloatingActionButton(
                   onPressed: () {
-                    _refreshMap();
+                    _showHistory();
                   },
                   backgroundColor: Colors.white,
                   mini: true,
                   child: const Icon(
-                    Icons.refresh,
+                    Icons.history,
                     color: Colors.grey,
                     size: 20,
                   ),
@@ -416,6 +420,7 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
       MaterialPageRoute(
         builder: (context) => ParkingDisplayPage(
           selectedArea: selectedArea,
+          studentId: widget.studentId,
         ),
       ),
     );
@@ -455,15 +460,12 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
     }
   }
 
-  void _refreshMap() {
-    // Refresh map data
-    setState(() {
-      // Trigger a rebuild to refresh markers
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Map refreshed'),
-        duration: Duration(seconds: 1),
+  void _showHistory() {
+    // Navigate to parking reservation page
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParkingReservation(studentId: widget.studentId),
       ),
     );
   }
@@ -471,10 +473,12 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
 
 class ParkingDisplayPage extends StatefulWidget {
   final String selectedArea;
+  final String studentId;
   
   const ParkingDisplayPage({
     super.key,
     required this.selectedArea,
+    required this.studentId,
   });
 
   @override
@@ -485,6 +489,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
   int? availableSlots;
   bool isLoading = true;
   bool isReserving = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -685,16 +690,16 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
             }
           });
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Reserved! Available parking: ${availableSlots}'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
+          // Save reservation to Firebase
+          await _saveReservationToFirebase();
+          
+          // Navigate to confirmation page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ParkingConfirmationPage(),
             ),
           );
-          
-          // Don't navigate back - stay on page to show updated count
-          // Navigator.pop(context);
         } else {
           throw Exception(data['error'] ?? 'Unknown error');
         }
@@ -712,6 +717,35 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
       setState(() {
         isReserving = false;
       });
+    }
+  }
+
+  Future<void> _saveReservationToFirebase() async {
+    try {
+      // Get the next reservation ID
+      final reservationsRef = _firestore.collection('ParkingSpotReservation');
+      final querySnapshot = await reservationsRef.get();
+      final nextNumber = querySnapshot.docs.length + 1;
+      final spotRsvtID = 'B${nextNumber.toString().padLeft(7, '0')}';
+      
+      // Get current time in UTC+8
+      final now = DateTime.now();
+      final utc8Time = now.subtract(const Duration(hours: 8)); // Convert to UTC for storage
+      
+      // Create reservation document
+      await reservationsRef.add({
+        'stdID': widget.studentId,
+        'spotLocation': widget.selectedArea,
+        'spotRsvtID': spotRsvtID,
+        'spotRsvtStatus': 'UpComing',
+        'rsvTime': Timestamp.fromDate(utc8Time),
+      });
+      
+      print('Reservation saved to Firebase: $spotRsvtID');
+    } catch (e) {
+      print('Error saving reservation to Firebase: $e');
+      // Don't throw error - reservation was successful on backend
+      // Just log it for debugging
     }
   }
 
@@ -917,6 +951,79 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class ParkingConfirmationPage extends StatelessWidget {
+  const ParkingConfirmationPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF4E6691),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+        title: const Text(
+          'Parking Assignment',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Large green checkmark icon
+            Container(
+              width: 120,
+              height: 120,
+              decoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 80,
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // "Booked Confirmed" text
+            const Text(
+              'Booked Confirmed',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // "Please parking within 5 minutes" text
+            const Text(
+              'Please parking within 5 minutes',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

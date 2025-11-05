@@ -105,24 +105,19 @@ class _HomePageState extends State<HomePage> {
                       width: double.infinity,
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey[300]!),
                       ),
                       child: Stack(
                         children: [
-                          // Background illustration placeholder
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.grey[200]!,
-                                  Colors.grey[100]!,
-                                ],
-                              ),
+                          // Background image
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/dashboard_1.png',
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
                             ),
                           ),
                           // Text overlay
@@ -175,7 +170,7 @@ class _HomePageState extends State<HomePage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const ParkingAssignment(),
+                                  builder: (context) => ParkingAssignment(studentId: widget.studentId),
                                 ),
                               );
                             } else if (function['label'] == 'Status') {
@@ -261,36 +256,39 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       // Floating Scan Button
-      floatingActionButton: Container(
-        width: 80,
-        height: 80,
-        decoration: const BoxDecoration(
-          color: Color(0xFF4E6691), // Dark blue background
-          shape: BoxShape.circle,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(40),
-            onTap: () {
-              setState(() {
-                _selectedIndex = 2;
-              });
-            },
-            child: Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE9F4FF), // Light blue inner circle
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/scan_logo.png',
-                    width: 28,
-                    height: 28,
-                    fit: BoxFit.contain,
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 12), // Move button down (positive Y = down)
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: const BoxDecoration(
+            color: Color(0xFF4E6691), // Dark blue background
+            shape: BoxShape.circle,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(40),
+              onTap: () {
+                setState(() {
+                  _selectedIndex = 2;
+                });
+              },
+              child: Center(
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE9F4FF), // Light blue inner circle
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/scan_logo.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),

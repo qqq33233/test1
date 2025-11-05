@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'visitor_register.dart';
 import 'visitor_upcoming.dart';
+import 'visitor_history.dart';
 
 class VisitorPage extends StatelessWidget {
   const VisitorPage({super.key});
@@ -108,7 +109,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const VisitorUpcomingPage(),
+                                builder: (context) => VisitorUpcomingPage(),
                               ),
                             );
                           },
@@ -117,8 +118,11 @@ class VisitorPage extends StatelessWidget {
                           imagePath: 'assets/visitor_history_logo.png',
                           label: 'History',
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('History tapped')),
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const VisitorHistoryPage(),
+                              ),
                             );
                           },
                         ),
@@ -143,27 +147,33 @@ class VisitorPage extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 80,
-            height: 80,
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
               color: const Color(0xFFE9F4FF),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
-            child: Center(
-              child: Image.asset(
-                imagePath,
-                height: 36,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  imagePath,
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ],

@@ -1,0 +1,554 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
+class ParkingReservation extends StatefulWidget {
+  final String studentId;
+  
+  const ParkingReservation({super.key, required this.studentId});
+
+  @override
+  State<ParkingReservation> createState() => _ParkingReservationState();
+}
+
+class _ParkingReservationState extends State<ParkingReservation>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // Debug function to check Firebase data
+  Future<void> _debugFirebaseData() async {
+    try {
+      // Get all documents for this student
+      final allDocs = await _firestore
+          .collection('ParkingSpotReservation')
+          .where('stdID', isEqualTo: widget.studentId)
+          .get();
+      
+      print('DEBUG: ==========================================');
+      print('DEBUG: Student ID: ${widget.studentId}');
+      print('DEBUG: Total documents found: ${allDocs.docs.length}');
+      
+      for (var doc in allDocs.docs) {
+        final data = doc.data();
+        print('DEBUG: Document ID: ${doc.id}');
+        print('DEBUG:   - stdID: ${data['stdID']} (type: ${data['stdID'].runtimeType})');
+        print('DEBUG:   - spotRsvtStatus: ${data['spotRsvtStatus']} (type: ${data['spotRsvtStatus'].runtimeType})');
+        print('DEBUG:   - spotLocation: ${data['spotLocation']}');
+        print('DEBUG:   - spotRsvtID: ${data['spotRsvtID']}');
+        print('DEBUG:   - rsvTime: ${data['rsvTime']}');
+        print('DEBUG: ---');
+      }
+      
+      // Also check all documents without filter
+      final allDocsNoFilter = await _firestore
+          .collection('ParkingSpotReservation')
+          .limit(10)
+          .get();
+      
+      print('DEBUG: First 10 documents in collection (no filter):');
+      for (var doc in allDocsNoFilter.docs) {
+        final data = doc.data();
+        print('DEBUG: Doc ID: ${doc.id}, stdID: ${data['stdID']}, Status: ${data['spotRsvtStatus']}');
+      }
+      print('DEBUG: ==========================================');
+    } catch (e) {
+      print('DEBUG Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF4E6691),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+        title: const Text(
+          'Reservation',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+      ),
+
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+
+          // Toggle (Up Coming / History)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              height: 50,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9F4FF),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicator: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(80),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                labelColor: Colors.black87,
+                unselectedLabelColor: Colors.black54,
+                labelStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                ),
+                dividerColor: Colors.transparent,
+                tabs: const [
+                  Tab(text: 'Up Coming'),
+                  Tab(text: 'History'),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Tab Views (scrollable)
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildUpComingTab(),
+                _buildHistoryTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpComingTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('ParkingSpotReservation')
+          .where('stdID', isEqualTo: widget.studentId)
+          .where('spotRsvtStatus', isEqualTo: 'UpComing')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF4E6691),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          // Debug: Print error and check what data exists
+          print('DEBUG UpComing Error: ${snapshot.error}');
+          _debugFirebaseData();
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _debugFirebaseData,
+                  child: const Text('Debug: Check Firebase'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          // Debug: Check what data actually exists
+          print('DEBUG UpComing: No data found for student ${widget.studentId}');
+          _debugFirebaseData();
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text(
+                'No upcoming reservations',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Sort documents by rsvTime (ascending - earliest first)
+        final sortedDocs = List.from(snapshot.data!.docs);
+        sortedDocs.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['rsvTime'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['rsvTime'] as Timestamp?;
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          return aTime.compareTo(bTime);
+        });
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: sortedDocs.length,
+          itemBuilder: (context, index) {
+            final doc = sortedDocs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            
+            final rsvTime = data['rsvTime'] as Timestamp?;
+            final location = data['spotLocation'] as String? ?? 'Unknown';
+            final reservationId = doc.id;
+            
+            String dateText = 'Unknown date';
+            if (rsvTime != null) {
+              // Convert UTC+8 timestamp to local DateTime for display
+              final dateTime = rsvTime.toDate();
+              // Add 8 hours to convert from UTC to UTC+8
+              final utc8DateTime = dateTime.add(const Duration(hours: 8));
+              dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: index < sortedDocs.length - 1 ? 12 : 0),
+              child: _buildReservationCard(
+                date: dateText,
+                location: location,
+                reservationId: reservationId,
+                onDelete: () {
+                  _showDeleteConfirmDialog(dateText, location, reservationId);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('ParkingSpotReservation')
+          .where('stdID', isEqualTo: widget.studentId)
+          .where('spotRsvtStatus', isEqualTo: 'History')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF4E6691),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          print('DEBUG History Error: ${snapshot.error}');
+          _debugFirebaseData();
+          return Center(
+            child: Text('Error: ${snapshot.error}'),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          print('DEBUG History: No data found for student ${widget.studentId}');
+          _debugFirebaseData();
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text(
+                'No reservation history',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Sort documents by rsvTime (descending - newest first)
+        final sortedDocs = List.from(snapshot.data!.docs);
+        sortedDocs.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['rsvTime'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['rsvTime'] as Timestamp?;
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          return bTime.compareTo(aTime); // Descending order
+        });
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: sortedDocs.length,
+          itemBuilder: (context, index) {
+            final doc = sortedDocs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            
+            final rsvTime = data['rsvTime'] as Timestamp?;
+            final location = data['spotLocation'] as String? ?? 'Unknown';
+            
+            String dateText = 'Unknown date';
+            if (rsvTime != null) {
+              // Convert UTC+8 timestamp to local DateTime for display
+              final dateTime = rsvTime.toDate();
+              // Add 8 hours to convert from UTC to UTC+8
+              final utc8DateTime = dateTime.add(const Duration(hours: 8));
+              dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: index < sortedDocs.length - 1 ? 12 : 0),
+              child: _buildReservationCard(
+                date: dateText,
+                location: location,
+                isHistory: true,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReservationCard({
+    required String date,
+    required String location,
+    bool isHistory = false,
+    String? reservationId,
+    VoidCallback? onDelete,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.15),
+            spreadRadius: 1,
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Text Section
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  date,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text(
+                      'Location',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      location,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Delete Icon
+          if (!isHistory && onDelete != null)
+            GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE9F4FF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Color(0xFF4E6691),
+                  size: 20,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(String date, String location, String reservationId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          titlePadding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 16),
+          title: const Text(
+            'Delete Reservation',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to delete the reservation for $location on $date?',
+            style: const TextStyle(
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          actionsPadding: EdgeInsets.zero,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Yes button (confirms deletion)
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          await _deleteReservation(reservationId);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xAEBFCF).withOpacity(0.08),
+                          foregroundColor: const Color(0xFF4E6691),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Yes',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // No button (cancels deletion)
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4E6691),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'No',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteReservation(String reservationId) async {
+    try {
+      await _firestore
+          .collection('ParkingSpotReservation')
+          .doc(reservationId)
+          .delete();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reservation deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting reservation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
