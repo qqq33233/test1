@@ -7,6 +7,7 @@ import 'visitor.dart';
 import 'profile.dart';
 import 'locator.dart';
 import 'message.dart';
+import 'carPlate_scanner.dart';
 
 class HomePage extends StatefulWidget {
   final String studentId;
@@ -310,9 +311,14 @@ class _HomePageState extends State<HomePage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(40),
               onTap: () {
-                setState(() {
-                  _selectedIndex = 2;
-                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CarPlateScannerPage(
+                      loggedInStudentId: widget.studentId, // Pass logged-in student ID
+                    ),
+                  ),
+                );
               },
               child: Center(
                 child: Container(

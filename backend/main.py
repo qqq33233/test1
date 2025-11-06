@@ -47,6 +47,42 @@ else:
     print("Warning: pyzbar not available. QR code detection will use OpenCV fallback.")
     print("To enable ZBar on Windows, install ZBar DLL from: https://github.com/mchehab/zbar")
 
+# EasyOCR for car plate detection (lazy import)
+EASYOCR_AVAILABLE = False
+easyocr_reader = None
+easyocr_init_error = None
+
+def _try_load_easyocr():
+    """Try to load EasyOCR for car plate recognition."""
+    global easyocr_init_error
+    try:
+        print("[EasyOCR] Attempting to import easyocr...")
+        import easyocr
+        print("[EasyOCR] Import successful, initializing reader (this may take a minute on first run)...")
+        # Initialize EasyOCR reader (English only for license plates)
+        # This will download models on first run, which can take time
+        reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        print("[EasyOCR] Reader initialized successfully!")
+        easyocr_init_error = None
+        return reader, True
+    except ImportError as e:
+        error_msg = f"EasyOCR not installed: {str(e)}"
+        print(f"[EasyOCR] ERROR: {error_msg}")
+        print("[EasyOCR] Install with: pip install easyocr")
+        easyocr_init_error = error_msg
+        return None, False
+    except Exception as e:
+        error_msg = f"EasyOCR initialization failed: {type(e).__name__}: {str(e)}"
+        print(f"[EasyOCR] ERROR: {error_msg}")
+        traceback.print_exc()
+        easyocr_init_error = error_msg
+        return None, False
+
+# Try to load EasyOCR (lazy - will initialize when first needed)
+# Don't initialize at startup to avoid blocking server startup
+easyocr_reader, EASYOCR_AVAILABLE = None, False
+print("[EasyOCR] EasyOCR will be initialized on first use (lazy loading)")
+
 app = FastAPI()
 
 # Enable CORS for Flutter app
@@ -1696,9 +1732,272 @@ def visitor_qr():
     """
 
 
+# === Car Plate Detection Variables ===
+car_plate_camera = None
+car_plate_camera_index = None
+car_plate_camera_lock = threading.Lock()
+last_detected_plate = None
+last_detected_plate_time = 0
+last_detected_plate_lock = threading.Lock()
+
+def init_car_plate_camera():
+    """Initialize camera for car plate scanning."""
+    global car_plate_camera, car_plate_camera_index
+    print("[Car Plate Camera] Initializing camera...")
+    
+    # If camera is already initialized and working, don't reinitialize
+    if car_plate_camera is not None and car_plate_camera.isOpened():
+        try:
+            # Test if we can read a frame
+            ret, _ = car_plate_camera.read()
+            if ret:
+                print(f"[Car Plate Camera] Camera already initialized and working (index: {car_plate_camera_index})")
+                return True
+        except:
+            pass
+    
+    # Try to use same camera as parking detection first (share the camera object)
+    if cap is not None and cap.isOpened():
+        try:
+            # Test if we can read from it
+            ret, _ = cap.read()
+            if ret:
+                car_plate_camera = cap
+                car_plate_camera_index = camera_index
+                print(f"[Car Plate Camera] ✓ Using same camera as parking detection (index: {camera_index})")
+                return True
+        except Exception as e:
+            print(f"[Car Plate Camera] Parking camera exists but error reading: {e}")
+    
+    # Otherwise, try to find a camera
+    print("[Car Plate Camera] Searching for available camera...")
+    for idx in [0, 1, 2]:
+        try:
+            print(f"[Car Plate Camera] Trying camera index {idx}...")
+            test_cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if test_cap.isOpened():
+                ret, test_frame = test_cap.read()
+                if ret and test_frame is not None:
+                    test_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                    test_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    # Release old camera if exists
+                    if car_plate_camera is not None:
+                        try:
+                            car_plate_camera.release()
+                        except:
+                            pass
+                    car_plate_camera = test_cap
+                    car_plate_camera_index = idx
+                    print(f"[Car Plate Camera] ✓ Camera connected successfully (index: {idx})")
+                    return True
+                else:
+                    print(f"[Car Plate Camera] Camera {idx} opened but failed to read frame")
+                    test_cap.release()
+            else:
+                print(f"[Car Plate Camera] Camera {idx} could not be opened")
+        except Exception as e:
+            print(f"[Car Plate Camera] Error testing camera {idx}: {e}")
+            continue
+    
+    print("[Car Plate Camera] ✗ WARNING: Could not initialize car plate camera")
+    print("[Car Plate Camera] Make sure iVCam is running and connected")
+    return False
+
+# Initialize car plate camera (lazy - will initialize when video feed is accessed)
+# Don't initialize at startup to avoid conflicts
+print("[Car Plate Camera] Camera will be initialized when video feed is accessed")
+
+def detect_car_plate(frame):
+    """Detect car plate number from frame using EasyOCR."""
+    global easyocr_reader, EASYOCR_AVAILABLE, easyocr_init_error
+    try:
+        # Lazy initialization - try to load EasyOCR if not already loaded
+        if easyocr_reader is None:
+            print("[Car Plate Detection] EasyOCR not initialized, attempting to load...")
+            easyocr_reader, EASYOCR_AVAILABLE = _try_load_easyocr()
+        
+        if not EASYOCR_AVAILABLE or easyocr_reader is None:
+            error_msg = easyocr_init_error or "EasyOCR not available"
+            print(f"[Car Plate Detection] {error_msg}")
+            return None
+        
+        # Try multiple preprocessing methods - start with original frame first
+        images_to_try = []
+        
+        # 1. Original frame (try this first - often works best)
+        images_to_try.append(("original", frame))
+        
+        # 2. Grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        images_to_try.append(("grayscale", gray))
+        
+        # 3. Enhanced contrast (CLAHE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(gray)
+        images_to_try.append(("enhanced", enhanced))
+        
+        # 4. Thresholded
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        images_to_try.append(("threshold", thresh))
+        
+        # 5. Adaptive threshold
+        adaptive_thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        images_to_try.append(("adaptive", adaptive_thresh))
+        
+        all_candidates = []
+        
+        # Try OCR on each preprocessed image
+        for method_name, img in images_to_try:
+            try:
+                results = easyocr_reader.readtext(img, paragraph=False)
+                print(f"[Car Plate Detection] Method: {method_name}, Found {len(results)} text regions")
+                
+                for (bbox, text, confidence) in results:
+                    # Keep original text for display, but also create cleaned version
+                    original_text = text.strip().upper()
+                    # Clean text: keep only alphanumeric and spaces
+                    cleaned_text = ''.join(c.upper() if c.isalnum() or c.isspace() else '' for c in text).strip()
+                    # Remove extra spaces
+                    cleaned_text = ' '.join(cleaned_text.split())
+                    
+                    # Debug: print ALL detected text
+                    print(f"  - Detected: '{text}' -> '{cleaned_text}' (confidence: {confidence:.3f})")
+                    
+                    # Very permissive: accept ANY text that has both letters AND numbers
+                    # This is the key requirement for license plates
+                    has_letter = any(c.isalpha() for c in cleaned_text)
+                    has_digit = any(c.isdigit() for c in cleaned_text)
+                    
+                    # Accept if it has both letters and numbers (license plate requirement)
+                    if has_letter and has_digit:
+                        # Accept text with 3-12 characters (very permissive)
+                        if len(cleaned_text.replace(' ', '')) >= 3 and len(cleaned_text.replace(' ', '')) <= 12:
+                            # Accept with very low confidence threshold (0.1)
+                            if confidence > 0.1:
+                                all_candidates.append((cleaned_text, confidence, method_name, original_text))
+                                print(f"    ✓ ACCEPTED: '{cleaned_text}' (confidence: {confidence:.3f}, method: {method_name})")
+            except Exception as e:
+                print(f"Error processing {method_name} image: {e}")
+                traceback.print_exc()
+                continue
+        
+        # Return the highest confidence result
+        if all_candidates:
+            # Sort by confidence (highest first)
+            all_candidates.sort(key=lambda x: x[1], reverse=True)
+            detected_plate, confidence, method, original = all_candidates[0]
+            print(f"[Car Plate Detection] ✓ SUCCESS! Selected: '{detected_plate}' (confidence: {confidence:.3f}, method: {method})")
+            
+            # Format the plate nicely: "ABC 1234" style
+            # Remove all spaces first
+            plate_no_spaces = detected_plate.replace(' ', '').replace('-', '')
+            
+            # Try to format as "ABC 1234" if it has at least 6 characters
+            if len(plate_no_spaces) >= 6:
+                # Check if first 3 are letters and rest are numbers
+                if plate_no_spaces[:3].isalpha() and plate_no_spaces[3:].isdigit():
+                    formatted = plate_no_spaces[:3] + ' ' + plate_no_spaces[3:]
+                    return formatted
+                # Or try to split at any point where letters end and numbers begin
+                for i in range(2, min(5, len(plate_no_spaces))):
+                    if plate_no_spaces[:i].isalpha() and plate_no_spaces[i:].isdigit():
+                        formatted = plate_no_spaces[:i] + ' ' + plate_no_spaces[i:]
+                        return formatted
+            
+            # If formatting doesn't work, return the cleaned text as-is
+            return detected_plate
+        else:
+            print("[Car Plate Detection] ✗ FAILED: No text with both letters AND numbers found")
+            print("[Car Plate Detection] Make sure the plate is clearly visible with both letters and numbers")
+            return None
+            
+    except Exception as e:
+        print(f"Error detecting car plate: {e}")
+        traceback.print_exc()
+        return None
+
+def generate_car_plate_frames():
+    """Generate video stream with car plate detection overlay."""
+    print("[Car Plate Video Feed] Video feed requested, initializing camera...")
+    # Try to initialize camera if not available
+    if car_plate_camera is None or not car_plate_camera.isOpened():
+        print("[Car Plate Video Feed] Camera not available, attempting to initialize...")
+        init_car_plate_camera()
+    
+    if car_plate_camera is None or not car_plate_camera.isOpened():
+        error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(error_frame, "Camera not connected!", (50, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        cv2.putText(error_frame, "Ensure iVCam is running", (30, 250),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', error_frame)
+        if ret:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        # Keep streaming error frame
+        while True:
+            time.sleep(1)
+            ret, buffer = cv2.imencode('.jpg', error_frame)
+            if ret:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        return
+    
+    while True:
+        try:
+            with car_plate_camera_lock:
+                if car_plate_camera is None or not car_plate_camera.isOpened():
+                    # Try to reinitialize
+                    init_car_plate_camera()
+                    if car_plate_camera is None or not car_plate_camera.isOpened():
+                        time.sleep(0.1)
+                        continue
+                
+                success, frame = car_plate_camera.read()
+                if not success or frame is None:
+                    print("[Car Plate Video Feed] Failed to read frame, retrying...")
+                    time.sleep(0.1)
+                    continue
+                
+                # Crop out iVCam logo if present
+                if frame.shape[0] > 100:
+                    frame = frame[60:-40, :]
+                
+                # Resize for display
+                display_frame = cv2.resize(frame.copy(), (960, 540))
+                
+                # Don't run OCR on every frame - it's too slow
+                # Only show the camera feed, OCR will run when scan button is clicked
+                # Draw instruction text on frame
+                cv2.putText(display_frame, "Point camera at car plate", (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(display_frame, "Click 'Scan Car Plate' to detect", (10, 60),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                
+                # Show last detected plate if available (from scan button)
+                with last_detected_plate_lock:
+                    if last_detected_plate:
+                        current_time = time.time()
+                        # Only show if detected within last 10 seconds
+                        if (current_time - last_detected_plate_time) < 10:
+                            cv2.putText(display_frame, f"Last detected: {last_detected_plate}", (10, 90),
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            
+            # Encode frame
+            ret, buffer = cv2.imencode('.jpg', display_frame)
+            if not ret:
+                continue
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            
+            time.sleep(0.033)  # ~30 FPS
+        except Exception as e:
+            print(f"Error in car plate frame generation: {e}")
+            break
+
 @app.get("/car-plate", response_class=HTMLResponse)
 def car_plate():
-    """Car Plate Detector placeholder page."""
+    """Car Plate Detector page."""
     return """
     <!DOCTYPE html>
     <html lang="en">
@@ -1710,31 +2009,68 @@ def car_plate():
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: #f5f5f5;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
                 margin: 0;
+                padding: 20px;
             }
             .container {
-                text-align: center;
+                max-width: 1200px;
+                margin: 0 auto;
                 background: white;
-                padding: 60px;
-                border-radius: 16px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
             h1 {
                 color: #1976d2;
                 margin-bottom: 20px;
             }
-            p {
-                color: #666;
-                margin-bottom: 30px;
+            .video-container {
+                text-align: center;
+                margin: 20px 0;
+            }
+            .video-stream {
+                max-width: 100%;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+            }
+            .controls {
+                margin: 20px 0;
+                text-align: center;
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 4px;
+                background: #e3f2fd;
+                color: #1976d2;
+            }
+            .scan-success {
+                background: #c8e6c9;
+                color: #2e7d32;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                background: #1976d2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 5px;
+            }
+            button:hover {
+                background: #1565c0;
+            }
+            button:disabled {
+                background: #9e9e9e;
+                cursor: not-allowed;
             }
             a {
                 color: #1976d2;
                 text-decoration: none;
                 font-weight: 600;
+                display: inline-block;
+                margin-top: 20px;
             }
             a:hover {
                 text-decoration: underline;
@@ -1744,9 +2080,50 @@ def car_plate():
     <body>
         <div class="container">
             <h1>Car Plate Detector</h1>
-            <p>This module is coming soon.</p>
+            <div class="video-container">
+                <img src="/car_plate_video_feed" class="video-stream" alt="Car Plate Scanner">
+            </div>
+            <div id="status" class="status">Point camera at car plate to scan...</div>
+            <div class="controls">
+                <button id="scanBtn" onclick="scanCarPlate()">Scan Car Plate</button>
+            </div>
             <a href="/">← Back to Console</a>
         </div>
+        <script>
+            function scanCarPlate() {
+                const scanBtn = document.getElementById('scanBtn');
+                const statusDiv = document.getElementById('status');
+                
+                scanBtn.disabled = true;
+                scanBtn.textContent = 'Scanning...';
+                statusDiv.textContent = 'Scanning car plate...';
+                statusDiv.className = 'status';
+                
+                fetch('/api/car-plate/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.plate_number) {
+                        statusDiv.textContent = 'Car plate detected: ' + data.plate_number;
+                        statusDiv.className = 'status scan-success';
+                    } else {
+                        statusDiv.textContent = 'No car plate detected. Please try again.';
+                        statusDiv.className = 'status';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    statusDiv.textContent = 'Error scanning car plate: ' + error.message;
+                    statusDiv.className = 'status';
+                })
+                .finally(() => {
+                    scanBtn.disabled = false;
+                    scanBtn.textContent = 'Scan Car Plate';
+                });
+            }
+        </script>
     </body>
     </html>
     """
@@ -1762,6 +2139,12 @@ def video_feed():
 def visitor_qr_video_feed():
     """MJPEG video stream route for visitor QR code scanning."""
     return StreamingResponse(generate_visitor_qr_frames(),
+                             media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/car_plate_video_feed")
+def car_plate_video_feed():
+    """MJPEG video stream route for car plate scanning."""
+    return StreamingResponse(generate_car_plate_frames(),
                              media_type="multipart/x-mixed-replace; boundary=frame")
 
 # Store last scanned QR code for API access
@@ -1856,6 +2239,152 @@ async def approve_visitor(request: Request):
             status_code=500,
             content={"success": False, "error": str(e)}
         )
+
+@app.post("/api/car-plate/scan")
+async def scan_car_plate():
+    """Scan car plate from camera and return detected plate number."""
+    try:
+        # Check if EasyOCR is available (try lazy initialization)
+        global easyocr_reader, EASYOCR_AVAILABLE, easyocr_init_error
+        if easyocr_reader is None:
+            print("[API] EasyOCR not initialized, attempting to load...")
+            easyocr_reader, EASYOCR_AVAILABLE = _try_load_easyocr()
+        
+        if not EASYOCR_AVAILABLE or easyocr_reader is None:
+            error_msg = easyocr_init_error or "EasyOCR not available. Please install: pip install easyocr"
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": error_msg,
+                    "plate_number": None
+                }
+            )
+        
+        # Check camera
+        if car_plate_camera is None or not car_plate_camera.isOpened():
+            # Try to reinitialize camera
+            init_car_plate_camera()
+            if car_plate_camera is None or not car_plate_camera.isOpened():
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "error": "Camera not connected. Ensure iVCam is running.",
+                        "plate_number": None
+                    }
+                )
+        
+        # Read frame from camera
+        with car_plate_camera_lock:
+            success, frame = car_plate_camera.read()
+            if not success or frame is None:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "error": "Failed to read frame from camera",
+                        "plate_number": None
+                    }
+                )
+            
+            # Crop iVCam logo if needed
+            if frame.shape[0] > 100:
+                frame = frame[60:-40, :]
+        
+        print(f"[Car Plate Scan] Frame size: {frame.shape}, Starting detection...")
+        
+        # Detect car plate
+        plate_number = detect_car_plate(frame)
+        
+        if plate_number:
+            # Update last detected plate
+            current_time = time.time()
+            with last_detected_plate_lock:
+                global last_detected_plate, last_detected_plate_time
+                last_detected_plate = plate_number
+                last_detected_plate_time = current_time
+            
+            print(f"[Car Plate Scan] Successfully detected: {plate_number}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "plate_number": plate_number,
+                    "message": f"Car plate detected: {plate_number}"
+                }
+            )
+        else:
+            print("[Car Plate Scan] No plate detected. Check console for detailed debug info.")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": "No car plate detected. Check console logs for details. Ensure the plate is clearly visible and well-lit.",
+                    "plate_number": None
+                }
+            )
+    except Exception as e:
+        print(f"Error in /api/car-plate/scan: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e),
+                "plate_number": None
+            }
+        )
+
+@app.get("/api/car-plate/check-scan")
+async def check_car_plate_scan():
+    """Check the latest scanned car plate number."""
+    try:
+        with last_detected_plate_lock:
+            current_time = time.time()
+            # Only return plates scanned in the last 30 seconds
+            if last_detected_plate and (current_time - last_detected_plate_time) < 30:
+                return JSONResponse(content={
+                    "success": True,
+                    "scanned": True,
+                    "plate_number": last_detected_plate,
+                    "message": "Car plate detected"
+                })
+            return JSONResponse(content={
+                "success": True,
+                "scanned": False,
+                "message": "No car plate detected"
+            })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.get("/api/car-plate/status")
+async def check_easyocr_status():
+    """Check EasyOCR initialization status and camera status."""
+    global easyocr_reader, EASYOCR_AVAILABLE, easyocr_init_error
+    # Try to initialize if not already done
+    if easyocr_reader is None:
+        print("[Status Check] EasyOCR not initialized, attempting to load...")
+        easyocr_reader, EASYOCR_AVAILABLE = _try_load_easyocr()
+    
+    # Check camera status
+    camera_status = "connected" if (car_plate_camera is not None and car_plate_camera.isOpened()) else "disconnected"
+    if camera_status == "disconnected":
+        # Try to reinitialize
+        init_car_plate_camera()
+        camera_status = "connected" if (car_plate_camera is not None and car_plate_camera.isOpened()) else "disconnected"
+    
+    return JSONResponse(content={
+        "easyocr_available": EASYOCR_AVAILABLE,
+        "easyocr_initialized": easyocr_reader is not None,
+        "camera_status": camera_status,
+        "camera_index": car_plate_camera_index,
+        "error": easyocr_init_error,
+        "message": f"EasyOCR: {'ready' if EASYOCR_AVAILABLE else 'not available'}, Camera: {camera_status}"
+    })
 
 async def process_visitor_qr(qr_code: str):
     """Process scanned QR code and update visitor status to History."""

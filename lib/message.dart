@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_page.dart';
 import 'profile.dart';
 import 'chat_page.dart';
@@ -16,17 +18,98 @@ class MessagePage extends StatefulWidget {
 
 class _MessagePageState extends State<MessagePage> {
   int _selectedIndex = 1; // Message is selected
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  List<MessageItem> _messages = [];
+  StreamSubscription<QuerySnapshot>? _messagesSubscription;
 
-  // Sample message data - you can replace this with database data later
-  final List<MessageItem> _messages = [
-    MessageItem(
-      senderName: 'Wong Ean Ean',
-      message: 'Hi, kindly remove your car at block k ya, Tq.',
-      time: DateTime.now().subtract(const Duration(hours: 2)),
-      profileImage: 'assets/profile.png',
-    ),
-    // Add more messages here as needed
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _loadMessages() {
+    if (widget.studentId == null) return;
+
+    // Load messages where current student is involved (stdID1 or stdID2) - match Firebase field names
+    _messagesSubscription = _firestore
+        .collection('messages')
+        .where('stdID1', isEqualTo: widget.studentId) // Match Firebase: stdID1
+        .orderBy('lastUpdated', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      _processMessages(snapshot);
+    }, onError: (error) {
+      print('[Message Page] Error loading messages: $error');
+    });
+
+    // Also listen for messages where student is stdID2
+    _firestore
+        .collection('messages')
+        .where('stdID2', isEqualTo: widget.studentId) // Match Firebase: stdID2
+        .orderBy('lastUpdated', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      _processMessages(snapshot);
+    }, onError: (error) {
+      print('[Message Page] Error loading messages: $error');
+    });
+  }
+
+  void _processMessages(QuerySnapshot snapshot) {
+    if (!mounted) return;
+
+    final newMessages = snapshot.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data == null) {
+        return MessageItem(
+          senderName: 'Student',
+          message: 'No messages',
+          time: DateTime.now(),
+          profileImage: 'assets/profile.png',
+          studentId: null,
+        );
+      }
+
+      final lastMessage = data['lastMessage'] as String? ?? 'No messages';
+      final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now();
+      
+      // Determine recipient student ID and sender name (match Firebase field names)
+      String? recipientStudentId;
+      String senderName = 'Student';
+      
+      if (data['stdID1'] == widget.studentId) { // Match Firebase: stdID1
+        recipientStudentId = data['stdID2'] as String?; // Match Firebase: stdID2
+      } else {
+        recipientStudentId = data['stdID1'] as String?; // Match Firebase: stdID1
+      }
+      
+      if (data['lastSenderId'] == widget.studentId) {
+        senderName = 'You';
+      } else if (recipientStudentId != null) {
+        // Get recipient student name
+        senderName = 'Student $recipientStudentId';
+      }
+      
+      return MessageItem(
+        senderName: senderName,
+        message: lastMessage,
+        time: lastUpdated,
+        profileImage: 'assets/profile.png',
+        studentId: recipientStudentId,
+      );
+    }).toList();
+
+    setState(() {
+      _messages = newMessages;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +251,8 @@ class _MessagePageState extends State<MessagePage> {
           MaterialPageRoute(
             builder: (context) => ChatPage(
               senderName: message.senderName,
-              studentId: widget.studentId,
+              currentStudentId: widget.studentId, // Current logged-in student
+              recipientStudentId: message.studentId, // Other student in the chat
               profileImage: message.profileImage,
             ),
           ),
@@ -305,12 +389,14 @@ class MessageItem {
   final String message;
   final DateTime time;
   final String profileImage;
+  final String? studentId;
 
   MessageItem({
     required this.senderName,
     required this.message,
     required this.time,
     required this.profileImage,
+    this.studentId,
   });
 }
 
