@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'home_page.dart';
 import 'stut_login.dart';
 import 'message.dart';
@@ -26,6 +29,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _vehiclePassDuration;
   String? _vehiclePassDate;
   bool _isLoading = true;
+  File? _profileImage; // Selected profile image
+  String? _profileImageUrl; // Profile image URL from Firebase Storage
+  final ImagePicker _imagePicker = ImagePicker();
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   @override
   void initState() {
@@ -56,6 +63,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _studentId = studentData['stdID'] as String? ?? widget.studentId;
           _email = studentData['stdEmail'] as String? ?? 'N/A';
           _phoneNumber = studentData['phoneNumber'] as String? ?? '018-3333333'; // Default if not in DB
+          _profileImageUrl = studentData['profileImageUrl'] as String?; // Load profile image URL
         });
       }
 
@@ -115,6 +123,180 @@ class _ProfilePageState extends State<ProfilePage> {
     const months = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
     return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
+  }
+
+  ImageProvider _getProfileImage() {
+    // Priority: 1. Selected image (local), 2. Firebase Storage URL, 3. Default asset
+    if (_profileImage != null) {
+      return FileImage(_profileImage!);
+    } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+      return NetworkImage(_profileImageUrl!);
+    } else {
+      return const AssetImage('assets/profile.png');
+    }
+  }
+
+  Future<void> _uploadProfileImage(File imageFile) async {
+    if (widget.studentId == null || widget.studentId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Student ID not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Text('Uploading profile photo...'),
+              ],
+            ),
+            duration: Duration(seconds: 30),
+          ),
+        );
+      }
+
+      // Create a reference to the location you want to upload to in Firebase Storage
+      final String fileName = 'profile_${widget.studentId}.jpg';
+      final Reference ref = _storage.ref().child('profile_images').child(fileName);
+
+      // Upload the file to Firebase Storage
+      final UploadTask uploadTask = ref.putFile(
+        imageFile,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'studentId': widget.studentId!,
+          },
+        ),
+      );
+
+      // Wait for upload to complete
+      final TaskSnapshot snapshot = await uploadTask;
+      
+      // Get download URL
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Update student document in Firestore with the image URL
+      final studentQuery = await _firestore
+          .collection('student')
+          .where('stdID', isEqualTo: widget.studentId)
+          .limit(1)
+          .get();
+
+      if (studentQuery.docs.isNotEmpty) {
+        await studentQuery.docs.first.reference.update({
+          'profileImageUrl': downloadUrl,
+        });
+
+        // Update local state
+        setState(() {
+          _profileImageUrl = downloadUrl;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo updated successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Student document not found');
+      }
+    } catch (e) {
+      print('Error uploading profile image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading photo: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickProfileImage() async {
+    try {
+      // Show options: Camera or Gallery
+      final ImageSource? source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (BuildContext context) {
+          return SafeArea(
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: const Text('Take Photo'),
+                  onTap: () => Navigator.of(context).pop(ImageSource.camera),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cancel),
+                  title: const Text('Cancel'),
+                  onTap: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (source == null) return;
+
+      // Pick image
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+
+        // Upload image to Firebase Storage
+        await _uploadProfileImage(File(pickedFile.path));
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _handleLogout() {
@@ -263,16 +445,47 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
                             
-                            // Profile Image - Positioned to overlap card
+                            // Profile Image with Camera Button - Positioned to overlap card
                             Positioned(
                               top: 0, // Position at top of stack
-                              child: CircleAvatar(
-                                radius: 50,
-                                backgroundColor: Colors.grey[300],
-                                backgroundImage: const AssetImage('assets/profile.png'),
-                                onBackgroundImageError: (exception, stackTrace) {
-                                  // Fallback if image doesn't load
-                                },
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  // Profile Photo
+                                  CircleAvatar(
+                                    radius: 50,
+                                    backgroundColor: Colors.grey[300],
+                                    backgroundImage: _getProfileImage(),
+                                    onBackgroundImageError: (exception, stackTrace) {
+                                      // Fallback if image doesn't load
+                                    },
+                                  ),
+                                  // Camera Button - Positioned at bottom-right
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: GestureDetector(
+                                      onTap: _pickProfileImage,
+                                      child: Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF4E6691), // Dark blue
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.camera_alt,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
