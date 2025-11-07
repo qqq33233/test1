@@ -46,3 +46,13 @@ app.*.map.json
 
 # Backend Firebase service account key (sensitive credentials)
 backend/serviceAccountKey.json
+
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
