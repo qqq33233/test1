@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'parking_assignment.dart';
+import 'parking_status.dart';
+import 'visitor.dart';
+import 'profile.dart';
+import 'locator.dart';
+import 'message.dart';
+import 'carPlate_scanner.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String studentId;
+  
+  const HomePage({super.key, required this.studentId});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -10,6 +20,36 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  String _studentName = 'Student Name';
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadStudentName();
+  }
+
+  Future<void> _loadStudentName() async {
+    try {
+      final studentQuery = await _firestore
+          .collection('student')
+          .where('stdID', isEqualTo: widget.studentId)
+          .limit(1)
+          .get();
+
+      if (studentQuery.docs.isNotEmpty) {
+        final studentData = studentQuery.docs.first.data();
+        final name = studentData['stdName'] as String?;
+        if (name != null && name.isNotEmpty) {
+          setState(() {
+            _studentName = name;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading student name: $e');
+    }
+  }
 
   final List<Map<String, dynamic>> _functions = [
     {'image': 'assets/parking_logo.png', 'label': 'Parking'},
@@ -24,49 +64,62 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Set system status bar to blue with white content
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF4E6691),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header Bar
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                color: Color(0xFF4E6691),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Welcome Back,',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const Text(
-                        'Student Name',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+      body: Column(
+        children: [
+          // Header Bar
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              bottom: 12,
             ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF4E6691),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome Back,',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      _studentName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
 
-            // Main Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+          // Main Content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -86,24 +139,19 @@ class _HomePageState extends State<HomePage> {
                       width: double.infinity,
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey[300]!),
                       ),
                       child: Stack(
                         children: [
-                          // Background illustration placeholder
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.grey[200]!,
-                                  Colors.grey[100]!,
-                                ],
-                              ),
+                          // Background image
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/dashboard_1.png',
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
                             ),
                           ),
                           // Text overlay
@@ -156,10 +204,37 @@ class _HomePageState extends State<HomePage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const ParkingAssignment(),
+                                  builder: (context) => ParkingAssignment(studentId: widget.studentId),
                                 ),
                               );
-                            } else {
+                            } else if (function['label'] == 'Status') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ParkingStatus(studentId: widget.studentId),
+                                ),
+                              );
+                            } else if (function['label'] == 'Visitor') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => VisitorPage(studentId: widget.studentId),
+                                ),
+                              );
+                            }else if (function['label'] == 'Profile') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => ProfilePage(studentId: widget.studentId)),
+                              );
+                            } else if (function['label'] == 'Locator') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LocatorPage(),
+                                ),
+                              );
+                            }
+                             else {
                               print('Tapped ${function['label']}');
                             }
                           },
@@ -200,7 +275,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
       // Bottom Navigation Bar
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -223,36 +297,44 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       // Floating Scan Button
-      floatingActionButton: Container(
-        width: 80,
-        height: 80,
-        decoration: const BoxDecoration(
-          color: Color(0xFF4E6691), // Dark blue background
-          shape: BoxShape.circle,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(40),
-            onTap: () {
-              setState(() {
-                _selectedIndex = 2;
-              });
-            },
-            child: Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE9F4FF), // Light blue inner circle
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/scan_logo.png',
-                    width: 28,
-                    height: 28,
-                    fit: BoxFit.contain,
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 12), // Move button down (positive Y = down)
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: const BoxDecoration(
+            color: Color(0xFF4E6691), // Dark blue background
+            shape: BoxShape.circle,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(40),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CarPlateScannerPage(
+                      loggedInStudentId: widget.studentId, // Pass logged-in student ID
+                    ),
+                  ),
+                );
+              },
+              child: Center(
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE9F4FF), // Light blue inner circle
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/scan_logo.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),
@@ -272,6 +354,23 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _selectedIndex = index;
         });
+        
+        // Navigate based on selection
+        if (label == 'Profile') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfilePage(studentId: widget.studentId),
+            ),
+          );
+        } else if (label == 'Message') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MessagePage(studentId: widget.studentId),
+            ),
+          );
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),

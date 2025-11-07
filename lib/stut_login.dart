@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_page.dart';
+import 'visitor.dart';
 
 class StutLogin extends StatefulWidget {
   const StutLogin({super.key});
@@ -12,6 +15,8 @@ class _StutLoginState extends State<StutLogin> {
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void dispose() {
@@ -20,52 +25,132 @@ class _StutLoginState extends State<StutLogin> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    // Navigate directly to home page
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
+  Future<void> _handleLogin() async {
+    // Validate input fields
+    if (_userIdController.text.trim().isEmpty) {
+      _showError('Please enter your User ID');
+      return;
+    }
+
+    if (_passwordController.text.trim().isEmpty) {
+      _showError('Please enter your password');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = _userIdController.text.trim();
+      final password = _passwordController.text.trim();
+
+      // Query Firestore for student with matching stdID
+      final querySnapshot = await _firestore
+          .collection('student')
+          .where('stdID', isEqualTo: userId)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showError('Invalid User ID or password');
+        return;
+      }
+
+      // Get the student document
+      final studentDoc = querySnapshot.docs.first;
+      final studentData = studentDoc.data();
+
+      // Verify password
+      final storedPassword = studentData['stdPassword'] as String?;
+      if (storedPassword == null || storedPassword != password) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showError('Invalid User ID or password');
+        return;
+      }
+
+      // Login successful - get student ID from database
+      final studentId = studentData['stdID'] as String? ?? userId;
+
+      // Navigate to home page with student ID
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage(studentId: studentId),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showError('Error connecting to database. Please try again.');
+      print('Login error: $e');
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Set system status bar to blue with white content
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF4E6691),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Header Bar - Full width
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4E6691), // New blue color
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 16.0),
-                    child: Text(
-                      'Student Login',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+      body: Column(
+        children: [
+          // Header Bar - Full width
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              bottom: 12,
+            ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF4E6691), // New blue color
+            ),
+            child: const Text(
+              'Student Login',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
-              
-              // Content with padding
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  children: [
-                
-                const SizedBox(height: 40),
+            ),
+          ),
+          
+          // Content with padding
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 40),
                 
                 // University Logo
                 Image.asset(
@@ -149,7 +234,7 @@ class _StutLoginState extends State<StutLogin> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: _isLoading ? null : () {
                       _handleLogin();
                     },
                     style: ElevatedButton.styleFrom(
@@ -159,14 +244,24 @@ class _StutLoginState extends State<StutLogin> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       elevation: 0,
+                      disabledBackgroundColor: Colors.grey,
                     ),
-                    child: const Text(
-                      'Sign in',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text(
+                            'Sign in',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                   ),
                 ),
                 
@@ -175,8 +270,12 @@ class _StutLoginState extends State<StutLogin> {
                 // Visitor Link
                 GestureDetector(
                   onTap: () {
-                    // Handle visitor link tap
-                    print('Visitor link tapped');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const VisitorPage(),
+                      ),
+                    );
                   },
                   child: const Text(
                     'If you are a visitor, click here',
@@ -188,13 +287,12 @@ class _StutLoginState extends State<StutLogin> {
                   ),
                 ),
                 
-                const SizedBox(height: 40),
-                  ],
-                ),
+                  const SizedBox(height: 40),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
