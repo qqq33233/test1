@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fyp/report.dart';
 import 'parking_assignment.dart';
 import 'parking_status.dart';
 import 'visitor.dart';
@@ -231,6 +232,12 @@ class _HomePageState extends State<HomePage> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const LocatorPage(),
+                                ),
+                              );
+                            }else if (function['label'] == 'Report') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => ReportScreen(),
                                 ),
                               );
                             }
