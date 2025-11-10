@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'staff_report.dart';
+import 'staff_vehicle_re.dart';
+import 'summary.dart';
+
 class StaffHomePage extends StatefulWidget {
   final String staffId;
   final String staffName;
@@ -21,7 +25,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
   final List<Map<String, dynamic>> _functions = [
     {'image': 'assets/parkingstaff_logo.png', 'label': 'Parking'},
     {'image': 'assets/appealstaff.png', 'label': 'Appeal'},
-    {'image': 'assets/passstaff.png', 'label': 'Pass'},
+    {'image': 'assets/passstaff.png', 'label': 'Registration'},
     {'image': 'assets/summary.png', 'label': 'Summary'},
   ];
 
@@ -95,13 +99,39 @@ class _StaffHomePageState extends State<StaffHomePage> {
                     final function = _functions[index];
                     return GestureDetector(
                       onTap: () {
-                        print('Tapped ${function['label']}');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${function['label']} - Coming soon'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
+                        if (function['label'] == 'Parking') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const IllegalParkingStaffPage(),
+                            ),
+                          );
+                        }else if (function['label'] == 'Registration') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => VehiclePassStaffPage(),
+                            ),
+                          );
+                        }else if (function['label'] == 'Appeal') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => VehiclePassStaffPage(),
+                            ),
+                          );}else if (function['label'] == 'Summary') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => SummaryStaffPage(),
+                            ),
+                          );
+                        } else {
+                          print('Tapped ${function['label']}');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${function['label']} - Coming soon'),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        }
                       },
                       child: Container(
                         decoration: BoxDecoration(
