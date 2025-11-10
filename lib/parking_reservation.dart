@@ -271,6 +271,7 @@ class _ParkingReservationState extends State<ParkingReservation>
             final data = doc.data() as Map<String, dynamic>;
             final rsvTime = data['rsvTime'] as Timestamp?;
             final location = data['spotLocation'] as String? ?? 'Unknown';
+            final spotNo = data['spotNo'] as String?;
             final reservationId = doc.id;
             String dateText = 'Unknown date';
             String timeText = '';
@@ -294,6 +295,7 @@ class _ParkingReservationState extends State<ParkingReservation>
                 date: dateText,
                 time: timeText,
                 location: location,
+                spotNo: spotNo,
                 reservationId: reservationId,
                 onDelete: () {
                   _showDeleteConfirmDialog(dateText, location, reservationId);
@@ -366,6 +368,7 @@ class _ParkingReservationState extends State<ParkingReservation>
             final data = doc.data() as Map<String, dynamic>;
             final rsvTime = data['rsvTime'] as Timestamp?;
             final location = data['spotLocation'] as String? ?? 'Unknown';
+            final spotNo = data['spotNo'] as String?;
             String dateText = 'Unknown date';
             String timeText = '';
             if (rsvTime != null) {
@@ -388,6 +391,7 @@ class _ParkingReservationState extends State<ParkingReservation>
                 date: dateText,
                 time: timeText,
                 location: location,
+                spotNo: spotNo,
                 isHistory: true,
               ),
             );
@@ -401,6 +405,7 @@ class _ParkingReservationState extends State<ParkingReservation>
     required String date,
     String time = '',
     required String location,
+    String? spotNo,
     bool isHistory = false,
     String? reservationId,
     VoidCallback? onDelete,
@@ -480,6 +485,31 @@ class _ParkingReservationState extends State<ParkingReservation>
                     ),
                   ],
                 ),
+                // Spot Number row (if available)
+                if (spotNo != null && spotNo.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Spot Number',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                      Text(
+                        'No. $spotNo',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
