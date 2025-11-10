@@ -89,6 +89,10 @@ flutter:
     - assets/visitor_history_logo.png
     - assets/visitor_upcoming_logo.png
     - assets/dashboard_1.png
+    - assets/parkingstaff_logo.png
+    - assets/appealstaff.png
+    - assets/passstaff.png
+    - assets/summary.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -6,170 +6,149 @@ class RoleSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Set system status bar
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarColor: Color(0xFF4E6691),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
     );
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 60),
-
-              // TAR UMT Logo
-              Image.asset(
-                'assets/tarumtLogo.png',
-                width: 330,
-                height: 120,
-                fit: BoxFit.contain,
+      body: Column(
+        children: [
+          // Header Bar
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              bottom: 12,
+            ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF4E6691),
+            ),
+            child: const Text(
+              'Welcome,',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w400,
               ),
+            ),
+          ),
 
-              const SizedBox(height: 60),
+          // Main Content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 70),
 
-              // Welcome Text
-              const Text(
-                'Welcome to',
-                style: TextStyle(
-                  fontSize: 20,
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Parking Management System',
-                style: TextStyle(
-                  fontSize: 24,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 60),
-
-              // Choose Role Text
-              const Text(
-                'Choose Your Role',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Student Login Button
-              SizedBox(
-                width: double.infinity,
-                height: 120,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Navigate to Student Login
-                    Navigator.pushNamed(context, '/student-login');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4E6691),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 2,
-                    shadowColor: const Color(0xFF4E6691).withOpacity(0.3),
+                  // TAR UMT Logo
+                  Image.asset(
+                    'assets/tarumtLogo.png',
+                    width: 280,
+                    height: 100,
+                    fit: BoxFit.contain,
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(
-                        Icons.school,
-                        size: 48,
-                        color: Colors.white,
+
+                  const SizedBox(height: 50),
+
+                  // Student Login Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/student-login');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4E6691),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
                       ),
-                      SizedBox(height: 12),
-                      Text(
+                      child: const Text(
                         'Student Login',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Staff Login Button
-              SizedBox(
-                width: double.infinity,
-                height: 120,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Navigate to Staff Login
-                    Navigator.pushNamed(context, '/staff-login');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B4F52),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
                     ),
-                    elevation: 2,
-                    shadowColor: const Color(0xFF8B4F52).withOpacity(0.3),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(
-                        Icons.badge,
-                        size: 48,
-                        color: Colors.white,
+
+                  const SizedBox(height: 16),
+
+                  // Staff Login Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/staff-login');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B4F52),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
                       ),
-                      SizedBox(height: 12),
-                      Text(
+                      child: const Text(
                         'Staff Login',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
 
-              const Spacer(),
+                  const Spacer(),
 
-              // Visitor Link
-              TextButton(
-                onPressed: () {
-                  // Navigate to Visitor Page
-                  Navigator.pushNamed(context, '/visitor');
-                },
-                child: const Text(
-                  'If you are a visitor, click here',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black87,
-                    decoration: TextDecoration.underline,
+                  // Visitor Link
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 40),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'If you are a visitor, click ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushNamed(context, '/visitor');
+                          },
+                          child: const Text(
+                            'here',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
-
-              const SizedBox(height: 40),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
