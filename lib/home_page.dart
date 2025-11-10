@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp/report.dart';
+import 'appeal_pass.dart';
 import 'parking_assignment.dart';
 import 'parking_status.dart';
+import 'realtimemap.dart';
+import 'registration_pass.dart';
 import 'visitor.dart';
 import 'profile.dart';
 import 'locator.dart';
@@ -227,6 +230,12 @@ class _HomePageState extends State<HomePage> {
                                 context,
                                 MaterialPageRoute(builder: (context) => ProfilePage(studentId: widget.studentId)),
                               );
+                            }else if (function['label'] == 'Report') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => ReportScreen(),
+                                ),
+                              );
                             } else if (function['label'] == 'Locator') {
                               Navigator.push(
                                 context,
@@ -234,10 +243,22 @@ class _HomePageState extends State<HomePage> {
                                   builder: (context) => const LocatorPage(),
                                 ),
                               );
-                            }else if (function['label'] == 'Report') {
+                            }else if (function['label'] == 'Traffic') {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => ReportScreen(),
+                                MaterialPageRoute(builder: (context) => RealTimeTrafficScreen(),
+                                ),
+                              );
+                            }else if (function['label'] == 'Pass') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => VehicleRegistrationScreen(),
+                                ),
+                              );
+                            }else if (function['label'] == 'Appeal') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => VehicleAppealScreen(),
                                 ),
                               );
                             }
