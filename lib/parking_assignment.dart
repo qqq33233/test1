@@ -518,9 +518,11 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
   }
 
   void _assignParkingSpot() {
-    // Auto-assign parking spot number between 8-14
+    // Parking spot will be auto-assigned by backend when reserving
+    // This function is kept for backward compatibility but spot number
+    // will be set from API response in _reserveParking()
     setState(() {
-      assignedSpotNumber = 8 + _random.nextInt(7); // Random number between 8-14 (inclusive)
+      assignedSpotNumber = null; // Will be set from backend response
     });
   }
 
@@ -565,6 +567,13 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
         }
         
         setState(() {
+          // Get assigned spot number from backend (if available)
+          final assignedSpotNo = availabilityData['assigned_spot_no']?.toString();
+          if (assignedSpotNo != null) {
+            assignedSpotNumber = int.tryParse(assignedSpotNo);
+            print('DEBUG: Assigned spot number from availability: $assignedSpotNumber');
+          }
+          
           // Backend returns "empty" - map it to "available" in frontend
           // Try empty first, then available, then available_slots
           // IMPORTANT: Make sure we're NOT using "total" which is the total number of spots
@@ -690,18 +699,35 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
 
     try {
       // Reserve parking spot and get updated availability
+      // Pass the displayed spot number to ensure backend uses the same one
       final response = await http.post(
         Uri.parse('$_backendUrl/api/parking/reserve'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'area': widget.selectedArea,
-          'spot_number': '',  // Not needed anymore, but backend might expect it
+          'spot_number': assignedSpotNumber?.toString() ?? '',  // Pass the displayed spot number
         }),
       );
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
+          // Get assigned spot number from backend
+          // Use the spot number from backend response, or keep the one already displayed
+          final assignedSpotNo = data['assigned_spot_no']?.toString();
+          if (assignedSpotNo != null) {
+            final newSpotNumber = int.tryParse(assignedSpotNo);
+            setState(() {
+              assignedSpotNumber = newSpotNumber;
+            });
+            print('Assigned spot number from backend reserve: $assignedSpotNumber');
+          } else if (assignedSpotNumber != null) {
+            // If backend doesn't return spot number, use the one already displayed
+            print('Backend did not return spot number, using displayed spot: $assignedSpotNumber');
+          } else {
+            print('Warning: No spot number assigned by backend and no spot number displayed');
+          }
+          
           // Backend returns "empty" - map it to "available" in frontend
           // Make sure we're using empty/available, NOT total
           setState(() {
@@ -717,7 +743,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
             }
           });
           
-          // Save reservation to Firebase
+          // Save reservation to Firebase (with assigned spot number)
           await _saveReservationToFirebase();
           
           // Navigate to confirmation page
@@ -759,16 +785,28 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
       final now = DateTime.now();
       final utc8Time = now.subtract(const Duration(hours: 8)); // Convert to UTC for storage
       
-      // Create reservation document
-      await reservationsRef.add({
+      // Prepare reservation data
+      final reservationData = {
         'stdID': widget.studentId,
         'spotLocation': widget.selectedArea,
         'spotRsvtID': spotRsvtID,
         'spotRsvtStatus': 'UpComing',
         'rsvTime': Timestamp.fromDate(utc8Time),
-      });
+      };
       
-      print('Reservation saved to Firebase: $spotRsvtID');
+      // Add spot number if assigned
+      if (assignedSpotNumber != null) {
+        reservationData['spotNo'] = assignedSpotNumber.toString();
+        print('Saving reservation with spot number: $assignedSpotNumber');
+      } else {
+        reservationData['spotNo'] = '';  // Empty string if no spot assigned
+        print('Warning: No spot number assigned');
+      }
+      
+      // Create reservation document
+      await reservationsRef.add(reservationData);
+      
+      print('Reservation saved to Firebase: $spotRsvtID with spotNo: ${reservationData['spotNo']}');
     } catch (e) {
       print('Error saving reservation to Firebase: $e');
       // Don't throw error - reservation was successful on backend

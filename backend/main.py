@@ -282,7 +282,7 @@ camera_lock = threading.Lock()  # Lock for thread-safe camera access
 # Global variables to store frozen frame and results (when confirm is clicked)
 frozen_frame = None  # Processed frame with overlays (for display)
 frozen_raw_frame = None  # Raw frame without overlays (for analysis)
-frozen_analysis = None  # Store (occupied_count, empty_count, statuses)
+frozen_analysis = None  # Store (occupied_count, empty_count, statuses, assigned_spot_no)
 frozen_frame_lock = threading.Lock()
 
 if cap is None:
@@ -420,8 +420,14 @@ def detect_parking(frame, area_name: str = None):
 
         color = (0, 0, 255) if occupied else (0, 255, 0)
         label = "Occupied" if occupied else "Empty"
+        spot_number = idx + 1  # Spot numbers start from 1
 
         cv2.polylines(frame, [pts], True, color, 2)
+        # Draw spot number (no 1, no 2, etc.)
+        spot_label = f"no {spot_number}"
+        cv2.putText(frame, spot_label, (pts[0][0], pts[0][1] - 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        # Draw status (Empty/Occupied)
         cv2.putText(frame, label, (pts[0][0], pts[0][1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
@@ -537,27 +543,44 @@ def get_parking_availability(area: str):
                 global frozen_analysis
                 if frozen_analysis is not None:
                     # Use stored analysis results from when confirm was clicked
-                    # frozen_analysis is a tuple: (occupied_count, empty_count, statuses)
-                    occupied_count, empty_count, statuses = frozen_analysis
+                    # frozen_analysis is a tuple: (occupied_count, empty_count, statuses, assigned_spot_no)
+                    if len(frozen_analysis) == 4:
+                        occupied_count, empty_count, statuses, assigned_spot_no = frozen_analysis
+                    else:
+                        # Backward compatibility: if old format, extract assigned_spot_no separately
+                        occupied_count, empty_count, statuses = frozen_analysis[:3]
+                        assigned_spot_no = None
+                        # Calculate assigned spot if not stored
+                        for i, is_occupied in enumerate(statuses):
+                            if not is_occupied:
+                                assigned_spot_no = str(i + 1)
+                                break
+                    
                     slot_statuses_list = [bool(s) for s in statuses] if statuses else []
                     parking_spaces = get_parking_spaces_for_area(area)
                     total_spots = len(parking_spaces) if parking_spaces else len(statuses) if statuses else 14
                     
                     # Debug: Print what we're returning
-                    print(f"DEBUG: Returning frozen analysis for area '{area}': empty={empty_count}, occupied={occupied_count}, total={total_spots}")
+                    print(f"DEBUG: Returning frozen analysis for area '{area}': empty={empty_count}, occupied={occupied_count}, total={total_spots}, assigned_spot_no={assigned_spot_no}")
+                    
+                    response_content = {
+                        "success": True,
+                        "area": area,
+                        "available": int(empty_count),
+                        "available_slots": int(empty_count),
+                        "empty": int(empty_count),  # Explicitly return "empty" for frontend
+                        "occupied": int(occupied_count),
+                        "total": int(total_spots),
+                        "slot_statuses": slot_statuses_list
+                    }
+                    
+                    # Add assigned spot number if available
+                    if assigned_spot_no is not None:
+                        response_content["assigned_spot_no"] = assigned_spot_no
                     
                     return JSONResponse(
                         status_code=200,
-                        content={
-                            "success": True,
-                            "area": area,
-                            "available": int(empty_count),
-                            "available_slots": int(empty_count),
-                            "empty": int(empty_count),  # Explicitly return "empty" for frontend
-                            "occupied": int(occupied_count),
-                            "total": int(total_spots),
-                            "slot_statuses": slot_statuses_list
-                        }
+                        content=response_content
                     )
         except Exception as e:
             print(f"Warning: Error accessing frozen_analysis: {e}")
@@ -779,43 +802,88 @@ def reserve_parking(request: ReserveRequest):
     """Reserve a parking spot and return available parking count (for Flutter app)."""
     try:
         area = request.area
-        spot_number = request.spot_number
+        spot_number = request.spot_number  # Spot number from frontend (the displayed one)
         
-        # Scan parking area to get current availability
-        if cap is None or not cap.isOpened():
-            return {
-                "success": False,
-                "error": "Camera not connected",
-                "available": 0,
-                "empty": 0
-            }
+        # Priority 1: Use the spot number passed from frontend (the one displayed to user)
+        # Priority 2: Use the assigned spot number from frozen_analysis (from Confirm button)
+        # This ensures we ALWAYS use the same spot number that was displayed
+        assigned_spot_no = None
+        occupied_count = 0
+        empty_count = 0
         
-        success, frame = read_frame_safe()
-        if not success or frame is None:
-            return {
-                "success": False,
-                "error": "Failed to read frame",
-                "available": 0,
-                "empty": 0
-            }
+        # Get counts from frozen_analysis if available
+        try:
+            with frozen_frame_lock:
+                global frozen_analysis
+                if frozen_analysis is not None:
+                    # frozen_analysis is a tuple: (occupied_count, empty_count, statuses, assigned_spot_no)
+                    if len(frozen_analysis) == 4:
+                        occupied_count, empty_count, _, frozen_assigned_spot = frozen_analysis
+                    else:
+                        # Backward compatibility
+                        occupied_count, empty_count, statuses = frozen_analysis[:3]
+                        frozen_assigned_spot = None
+                        # Calculate assigned spot if not stored
+                        for i, is_occupied in enumerate(statuses):
+                            if not is_occupied:
+                                frozen_assigned_spot = str(i + 1)
+                                break
+                    
+                    # Priority 1: Use spot number from frontend (the displayed one)
+                    if spot_number and spot_number.strip():
+                        assigned_spot_no = spot_number.strip()
+                        print(f"DEBUG: Using spot number from frontend (displayed): {assigned_spot_no}")
+                    # Priority 2: Use spot number from frozen_analysis
+                    elif frozen_assigned_spot:
+                        assigned_spot_no = frozen_assigned_spot
+                        print(f"DEBUG: Using assigned spot from frozen_analysis: {assigned_spot_no}")
+        except Exception as e:
+            print(f"Warning: Error accessing frozen_analysis in /api/parking/reserve: {e}")
+            # Continue to fallback analysis
         
-        # Crop iVCam logo if needed
-        if frame.shape[0] > 100:
-            frame = frame[60:-40, :]
-        
-        if frame is None or frame.size == 0:
-            return {
-                "success": False,
-                "error": "Invalid frame after crop",
-                "available": 0,
-                "empty": 0
-            }
-        
-        # Resize to match processing size
-        frame = cv2.resize(frame, (960, 540))
-        
-        # Get parking status
-        occupied_count, empty_count, statuses = analyze_parking(frame, area_name=area)
+        # If still no spot number, do a fresh analysis (fallback - should not happen in normal flow)
+        if assigned_spot_no is None:
+            print("DEBUG: No frozen_analysis found, doing fresh analysis")
+            if cap is None or not cap.isOpened():
+                return {
+                    "success": False,
+                    "error": "Camera not connected. Please click 'Confirm' on backend console first.",
+                    "available": 0,
+                    "empty": 0
+                }
+            
+            success, frame = read_frame_safe()
+            if not success or frame is None:
+                return {
+                    "success": False,
+                    "error": "Failed to read frame. Please click 'Confirm' on backend console first.",
+                    "available": 0,
+                    "empty": 0
+                }
+            
+            # Crop iVCam logo if needed
+            if frame.shape[0] > 100:
+                frame = frame[60:-40, :]
+            
+            if frame is None or frame.size == 0:
+                return {
+                    "success": False,
+                    "error": "Invalid frame after crop",
+                    "available": 0,
+                    "empty": 0
+                }
+            
+            # Resize to match processing size
+            frame = cv2.resize(frame, (960, 540))
+            
+            # Get parking status
+            occupied_count, empty_count, statuses = analyze_parking(frame, area_name=area)
+            
+            # Auto-assign first available parking spot number (1-14)
+            for i, is_occupied in enumerate(statuses):
+                if not is_occupied:
+                    assigned_spot_no = str(i + 1)  # Spot numbers start from 1
+                    break
         
         return {
             "success": True,
@@ -824,7 +892,8 @@ def reserve_parking(request: ReserveRequest):
             "available": empty_count,
             "empty": empty_count,  # Backend returns "empty", frontend displays as "available"
             "occupied": occupied_count,
-            "total": len(get_parking_spaces_for_area(area)) if get_parking_spaces_for_area(area) else 14
+            "total": len(get_parking_spaces_for_area(area)) if get_parking_spaces_for_area(area) else 14,
+            "assigned_spot_no": assigned_spot_no  # Use the spot number from frozen_analysis (same as displayed)
         }
     except Exception as e:
         print(f"Error in /api/parking/reserve: {e}")
@@ -848,12 +917,24 @@ def status():
                 global frozen_analysis
                 if frozen_analysis is not None:
                     # Use stored analysis results from when confirm was clicked
-                    occupied_count, empty_count, _ = frozen_analysis
-                    return {
+                    # frozen_analysis is a tuple: (occupied_count, empty_count, statuses, assigned_spot_no)
+                    if len(frozen_analysis) == 4:
+                        occupied_count, empty_count, _, assigned_spot_no = frozen_analysis
+                    else:
+                        occupied_count, empty_count, _ = frozen_analysis[:3]
+                        assigned_spot_no = None
+                    
+                    result = {
                         "occupied": occupied_count, 
                         "empty": empty_count,
                         "available": empty_count  # Available parking is same as empty
                     }
+                    
+                    # Add assigned spot number if available
+                    if assigned_spot_no is not None:
+                        result["assigned_spot_no"] = assigned_spot_no
+                    
+                    return result
         except Exception as e:
             print(f"Warning: Error accessing frozen_analysis in /status: {e}")
             # Continue to live camera fallback
@@ -986,12 +1067,19 @@ def confirm():
             # Use original frame if detection fails
             processed_frame = frame.copy()
         
+        # Auto-assign first available parking spot number (1-14)
+        assigned_spot_no = None
+        for i, is_occupied in enumerate(statuses):
+            if not is_occupied:
+                assigned_spot_no = str(i + 1)  # Spot numbers start from 1
+                break
+        
         try:
             with frozen_frame_lock:
                 global frozen_frame, frozen_raw_frame, frozen_analysis
                 frozen_frame = processed_frame.copy()  # For display
                 frozen_raw_frame = raw_frame.copy()  # For re-analysis if needed
-                frozen_analysis = (occupied_count, empty_count, statuses)  # Store analysis results
+                frozen_analysis = (occupied_count, empty_count, statuses, assigned_spot_no)  # Store analysis results including assigned spot
         except Exception as e:
             print(f"Error storing frozen frame in /confirm: {e}")
             # Continue even if storage fails
@@ -1006,7 +1094,8 @@ def confirm():
                 "empty": int(empty_count),
                 "available": int(empty_count),  # Available parking spots
                 "total": int(len(PARKING_SPACES)),
-                "slot_statuses": slot_statuses_list  # Detailed status per slot (True=occupied, False=empty)
+                "slot_statuses": slot_statuses_list,  # Detailed status per slot (True=occupied, False=empty)
+                "assigned_spot_no": assigned_spot_no  # Auto-assigned spot number (1-14) or None if no spots available
             }
         )
     except Exception as e:

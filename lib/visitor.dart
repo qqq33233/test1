@@ -99,6 +99,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                // visitor.dart: Has studentId - stores visitor data WITH stdID
                                 builder: (context) => VisitorRegisterPage(studentId: studentId),
                               ),
                             );
@@ -111,6 +112,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                // visitor.dart: Has studentId - shows only visitors WITH this student's stdID
                                 builder: (context) => VisitorUpcomingPage(studentId: studentId),
                               ),
                             );
@@ -123,6 +125,7 @@ class VisitorPage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                // visitor.dart: Has studentId - shows only visitors WITH this student's stdID
                                 builder: (context) => VisitorHistoryPage(studentId: studentId),
                               ),
                             );
