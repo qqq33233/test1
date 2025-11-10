@@ -5,7 +5,7 @@ import 'edit_status.dart';
 
 class ParkingStatus extends StatefulWidget {
   final String studentId;
-  
+
   const ParkingStatus({super.key, required this.studentId});
 
   @override
@@ -32,7 +32,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
     // Handle both "02:00 PM" and "02:00PM" formats
     String timeStr = time12Hour.trim().toUpperCase();
     String period = '';
-    
+
     if (timeStr.contains('AM') || timeStr.contains('PM')) {
       if (timeStr.contains(' AM')) {
         period = 'AM';
@@ -51,18 +51,18 @@ class _ParkingStatusState extends State<ParkingStatus> {
       // Default to PM if no period specified
       period = 'PM';
     }
-    
+
     final timePart = timeStr.split(':');
     final hour = int.parse(timePart[0].trim());
     final minute = int.parse(timePart[1].trim());
-    
+
     int hour24 = hour;
     if (period == 'PM' && hour != 12) {
       hour24 = hour + 12;
     } else if (period == 'AM' && hour == 12) {
       hour24 = 0;
     }
-    
+
     // Create DateTime in UTC+8 (Asia/Kuala_Lumpur)
     // We interpret the user's input as UTC+8 time, then convert to UTC for Firebase
     // To convert UTC+8 to UTC: subtract 8 hours
@@ -74,7 +74,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
       hour24,
       minute,
     ).subtract(const Duration(hours: 8));
-    
+
     // Return as UTC DateTime for Firebase storage
     return utcDateTime;
   }
@@ -83,23 +83,23 @@ class _ParkingStatusState extends State<ParkingStatus> {
   // Firebase stores in UTC, but we need to display in UTC+8 (as shown in Firebase console)
   String _timestampTo12Hour(Timestamp? timestamp) {
     if (timestamp == null) return '02:00 PM';
-    
+
     // Get UTC time from Firebase
     final utcDateTime = timestamp.toDate().toUtc();
-    
+
     // Convert to UTC+8 (Asia/Kuala_Lumpur) by adding 8 hours
     final utc8DateTime = utcDateTime.add(const Duration(hours: 8));
-    
+
     int hour = utc8DateTime.hour;
     final minute = utc8DateTime.minute;
     final period = hour >= 12 ? 'PM' : 'AM';
-    
+
     if (hour == 0) {
       hour = 12;
     } else if (hour > 12) {
       hour = hour - 12;
     }
-    
+
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
   }
 
@@ -125,14 +125,14 @@ class _ParkingStatusState extends State<ParkingStatus> {
         setState(() {
           // Get status type
           currentStatus = data['sttType'] ?? 'In Class';
-          
+
           // Get start and end times
           final startTimestamp = data['svsStartTime'] as Timestamp?;
           final endTimestamp = data['svsEndTime'] as Timestamp?;
-          
+
           startTime = _timestampTo12Hour(startTimestamp);
           endTime = _timestampTo12Hour(endTimestamp);
-          
+
           isLoading = false;
         });
       } else {
@@ -140,7 +140,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
         setState(() {
           isLoading = false;
         });
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -155,7 +155,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
       setState(() {
         isLoading = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -174,7 +174,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
       final now = DateTime.now();
       final startDateTime = _parseTimeToDateTime(startTimeStr, now);
       final endDateTime = _parseTimeToDateTime(endTimeStr, now);
-      
+
       if (documentId == null) {
         // Create new document if it doesn't exist
         // Use auto-generated document ID
@@ -185,7 +185,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
           'svsStartTime': Timestamp.fromDate(startDateTime),
           'svsEndTime': Timestamp.fromDate(endDateTime),
         });
-        
+
         documentId = docRef.id;
       } else {
         // Update existing document
@@ -227,7 +227,7 @@ class _ParkingStatusState extends State<ParkingStatus> {
         statusBarBrightness: Brightness.dark,
       ),
     );
-    
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -269,172 +269,172 @@ class _ParkingStatusState extends State<ParkingStatus> {
             ),
           ),
 
-            // Main Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF4E6691),
-                        ),
-                      )
-                    : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Your status now is section
-                    const Text(
-                      'Your status now is',
-                      style: TextStyle(
+          // Main Content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: isLoading
+                  ? const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF4E6691),
+                ),
+              )
+                  : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Your status now is section
+                  const Text(
+                    'Your status now is',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCFCFCF)),
+                    ),
+                    child: Text(
+                      currentStatus,
+                      style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w500,
                         color: Colors.black,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[300]!),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Your parking time section
+                  const Text(
+                    'Your parking time',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      // Start time field
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCFCFCF)),
+                          ),
+                          child: Text(
+                            startTime,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        currentStatus,
-                        style: const TextStyle(
+
+                      const SizedBox(width: 12),
+
+                      // "to" separator
+                      const Text(
+                        'to',
+                        style: TextStyle(
                           fontSize: 16,
                           color: Colors.black,
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(width: 12),
 
-                    // Your parking time section
-                    const Text(
-                      'Your parking time',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Start time field
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              startTime,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        const SizedBox(width: 12),
-                        
-                        // "to" separator
-                        const Text(
-                          'to',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.black,
-                          ),
-                        ),
-                        
-                        const SizedBox(width: 12),
-                        
-                        // End time field
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              endTime,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Edit button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EditStatus(
-                                currentStatus: currentStatus,
-                                startTime: startTime,
-                                endTime: endTime,
-                              ),
-                            ),
-                          );
-                          
-                          if (result != null) {
-                            // Update local state
-                            setState(() {
-                              currentStatus = result['status'];
-                              startTime = result['startTime'];
-                              endTime = result['endTime'];
-                            });
-                            
-                            // Update Firebase
-                            await _updateStatusInFirebase(
-                              result['status'],
-                              result['startTime'],
-                              result['endTime'],
-                            );
-                            
-                            // Reload from Firebase to ensure sync
-                            await _loadStatusFromFirebase();
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4E6691), // Dark blue
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
+                      // End time field
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCFCFCF)),
                           ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Edit',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                          child: Text(
+                            endTime,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black,
+                            ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // Edit button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: isLoading ? null : () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditStatus(
+                              currentStatus: currentStatus,
+                              startTime: startTime,
+                              endTime: endTime,
+                            ),
+                          ),
+                        );
+
+                        if (result != null) {
+                          // Update local state
+                          setState(() {
+                            currentStatus = result['status'];
+                            startTime = result['startTime'];
+                            endTime = result['endTime'];
+                          });
+
+                          // Update Firebase
+                          await _updateStatusInFirebase(
+                            result['status'],
+                            result['startTime'],
+                            result['endTime'],
+                          );
+
+                          // Reload from Firebase to ensure sync
+                          await _loadStatusFromFirebase();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4E6691), // Dark blue
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Edit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );

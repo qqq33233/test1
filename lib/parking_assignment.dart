@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'parking_reservation.dart';
 
@@ -134,7 +135,7 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: Stack(
         children: [
@@ -181,6 +182,20 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // History Button
+                FloatingActionButton(
+                  onPressed: () {
+                    _showHistory();
+                  },
+                  backgroundColor: Colors.white,
+                  mini: true,
+                  child: const Icon(
+                    Icons.history,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 // Zoom In Button
                 FloatingActionButton(
                   onPressed: () {
@@ -205,20 +220,6 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
                   child: const Icon(
                     Icons.zoom_out,
                     color: Colors.blue,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // History Button
-                FloatingActionButton(
-                  onPressed: () {
-                    _showHistory();
-                  },
-                  backgroundColor: Colors.white,
-                  mini: true,
-                  child: const Icon(
-                    Icons.history,
-                    color: Colors.grey,
                     size: 20,
                   ),
                 ),
@@ -305,41 +306,57 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
                 ],
               ),
               actions: [
-                // Cancel Button
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'cancel',
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 16,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Cancel Button
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'cancel',
+                          style: TextStyle(
+                            color: Color(0xFF4E6691),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Apply Button
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _applyFilter(_selectedParkingArea);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4E6691),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    const SizedBox(width: 12),
+                    // Apply Button
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _applyFilter(_selectedParkingArea);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4E6691),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text(
+                          'Apply',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: const Text(
-                    'Apply',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  ],
                 ),
               ],
             );
@@ -366,10 +383,10 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: isSelected ? const Color(0xFFEFF3F8) : Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFF4E6691) : Colors.grey[300]!,
+            color: isSelected ? const Color(0xFF4E6691) : const Color(0xFFD8DCDD),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -390,7 +407,7 @@ class _ParkingAssignmentState extends State<ParkingAssignment> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF4E6691) : Colors.grey[400]!,
+                  color: isSelected ? const Color(0xFF4E6691) : const Color(0xFFD8DCDD),
                   width: 2,
                 ),
                 color: isSelected ? const Color(0xFF4E6691) : Colors.transparent,
@@ -489,12 +506,22 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
   int? availableSlots;
   bool isLoading = true;
   bool isReserving = false;
+  int? assignedSpotNumber;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Random _random = Random();
 
   @override
   void initState() {
     super.initState();
+    _assignParkingSpot();
     _loadParkingData();
+  }
+
+  void _assignParkingSpot() {
+    // Auto-assign parking spot number between 8-14
+    setState(() {
+      assignedSpotNumber = 8 + _random.nextInt(7); // Random number between 8-14 (inclusive)
+    });
   }
 
   // Backend URL - Change this to your computer's IP address
@@ -814,11 +841,6 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
                     child: Text(
                       widget.selectedArea,
                       style: const TextStyle(
@@ -832,54 +854,90 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                   
                   const SizedBox(height: 24),
                   
-                  // Available Parking Slots with Refresh Button
+                  // Parking Information Box
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFFE9F4FF),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                      border: Border.all(color: const Color(0xFFC4C4C4)),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Available Parking:',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        // Available Parking
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            const Text(
+                              'Available Parking:',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
                             Text(
                               availableSlots != null ? '$availableSlots' : '-',
                               style: const TextStyle(
-                                fontSize: 24,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF4E6691),
+                                color: Colors.black87,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.refresh),
-                              color: const Color(0xFF4E6691),
-                              onPressed: isLoading ? null : () {
-                                _loadParkingData();
-                              },
-                              tooltip: 'Refresh parking data',
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Parking Spot Number Assign
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Parking Spot Number Assign:',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                            Text(
+                              assignedSpotNumber != null ? 'No. $assignedSpotNumber' : '-',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
                             ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Refresh Parking Button
+                  Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Refresh Parking',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          color: Colors.grey,
+                          onPressed: isLoading ? null : () {
+                            _assignParkingSpot();
+                            _loadParkingData();
+                          },
+                          tooltip: 'Refresh parking data',
                         ),
                       ],
                     ),

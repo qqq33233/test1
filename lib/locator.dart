@@ -137,6 +137,7 @@ class _LocatorPageState extends State<LocatorPage> {
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext context) {
         return Dialog(
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -145,20 +146,24 @@ class _LocatorPageState extends State<LocatorPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.location_on,
-                  color: Color(0xFF4E6691),
-                  size: 40,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Get your nearest parking!',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      color: Color(0xFF4E6691),
+                      size: 40,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Get your nearest parking!',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -294,11 +299,11 @@ class _LocatorPageState extends State<LocatorPage> {
                     return Container(
                       width: double.infinity,
                       height: 200,
-                      color: Colors.grey[300],
+                      color: Colors.white,
                       child: const Icon(
                         Icons.image_not_supported,
                         size: 50,
-                        color: Colors.grey,
+                        color: Colors.white,
                       ),
                     );
                   },
@@ -361,58 +366,31 @@ class _LocatorPageState extends State<LocatorPage> {
   List<Marker> _buildMarkers() {
     List<Marker> markers = [];
 
-    // Current location marker (blue)
-    if (_currentLocation != null) {
-      markers.add(
-        Marker(
-          point: _currentLocation!,
-          width: 30,
-          height: 30,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.location_on,
-                color: Colors.white,
-                size: 20,
-              ),
+    // Current location marker (blue) - always show default location if current location is null
+    final locationToShow = _currentLocation ?? _defaultLocation;
+    markers.add(
+      Marker(
+        point: locationToShow,
+        width: 40,
+        height: 40,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF4E6691),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.location_on,
+              color: Colors.white,
+              size: 24,
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
 
-    // Parking location markers (grey with P)
-    for (var parking in _parkingLocations) {
-      markers.add(
-        Marker(
-          point: parking.coordinates,
-          width: 40,
-          height: 40,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white, width: 2),
-            ),
-            child: const Center(
-              child: Text(
-                'P',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    // Parking location markers removed to avoid white boxes on map
 
     return markers;
   }

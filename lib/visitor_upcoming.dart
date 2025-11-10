@@ -276,119 +276,162 @@ class _VisitorUpcomingPageState extends State<VisitorUpcomingPage> {
     final vehicleNumber = visitor?['carPlateNo'] ?? 'N/A';
     final qrCodeData = data['vstQR'] as String? ?? '';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Date at top left
-              Text(
-                dateText,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+    // Card with trash icon outside
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Card Container (without trash icon)
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-              const SizedBox(height: 12),
-              // Visitor details
-              Text(
-                'Visitor Name: $visitorName',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-       ),
-              const SizedBox(height: 6),
-              Text(
-                'Vehicle No.: $vehicleNumber',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-          // Delete icon in top right
-          Positioned(
-            top: 0,
-            right: 0,
-            child: GestureDetector(
-              onTap: () => _deleteVisitor(context, doc.id),
-              child: const Icon(
-                Icons.delete_outline,
-                color: Colors.red,
-                size: 24,
-              ),
+              ],
             ),
-          ),
-          // QR code icon in bottom right
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: GestureDetector(
-              onTap: () {
-                if (qrCodeData.isNotEmpty) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => VisitorQRCodePage(
-                        visitorName: visitorName,
-                        contactNumber: visitor?['contNo'] ?? '',
-                        vehicleNumber: vehicleNumber,
-                        visitDate: dateText,
-                        qrCodeData: qrCodeData,
-                        vstRsvtID: data['vstRsvtID'] as String? ?? '',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date and QR code on same line
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Date at top left
+                    Text(
+                      dateText,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
-                  );
-                }
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
+                    // QR code icon on the right
+                    GestureDetector(
+                      onTap: () {
+                        if (qrCodeData.isNotEmpty) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => VisitorQRCodePage(
+                                visitorName: visitorName,
+                                contactNumber: visitor?['contNo'] ?? '',
+                                vehicleNumber: vehicleNumber,
+                                visitDate: dateText,
+                                qrCodeData: qrCodeData,
+                                vstRsvtID: data['vstRsvtID'] as String? ?? '',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.qr_code,
+                            size: 24,
+                            color: Colors.black87,
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'QR code',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.qr_code,
-                      size: 24,
-                      color: Colors.black87,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Separator line
+                Container(
+                  height: 1,
+                  color: Colors.grey.withOpacity(0.3),
+                  margin: const EdgeInsets.only(bottom: 8),
+                ),
+                // Visitor details
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Visitor Name',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'QR code',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
+                    Text(
+                      visitorName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Vehicle No.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      vehicleNumber,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+
+        // Delete Icon (outside the card)
+        const SizedBox(width: 12),
+        GestureDetector(
+          onTap: () => _deleteVisitor(context, doc.id),
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F4FF),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color(0xFFE9F4FF),
+                width: 1,
+              ),
+            ),
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.black87,
+              size: 20,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

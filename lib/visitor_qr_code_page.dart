@@ -100,22 +100,7 @@ class VisitorQRCodePage extends StatelessWidget {
 
                   const SizedBox(height: 30),
 
-                  // Details Submitted Heading
-                  const Text(
-                    'Details Submitted',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
 
-                  // Divider line
-                  Container(
-                    height: 1,
-                    color: Colors.grey[300],
-                    margin: const EdgeInsets.symmetric(vertical: 16),
-                  ),
 
                   const SizedBox(height: 20),
 
@@ -127,8 +112,6 @@ class VisitorQRCodePage extends StatelessWidget {
                   _buildDetailRow('Vehicle No.', vehicleNumber),
                   const SizedBox(height: 16),
                   _buildDetailRow('Visit Date', visitDate),
-                  const SizedBox(height: 16),
-                  _buildDetailRow('Reservation ID', vstRsvtID),
 
                   const SizedBox(height: 40),
                 ],
