@@ -70,7 +70,7 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF5B7399),
+        backgroundColor: const Color(0xFF4E6691),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
@@ -218,7 +218,7 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
               child: ElevatedButton(
                 onPressed: _submitAppeal,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5B7399),
+                  backgroundColor: const Color(0xFF4E6691),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -280,7 +280,7 @@ class AppealConfirmedScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF5B7399),
+        backgroundColor: const Color(0xFF4E6691),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),

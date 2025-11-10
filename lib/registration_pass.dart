@@ -48,7 +48,7 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4A6FA5),
+              primary: Color(0xFF4E6691),
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Colors.black,
@@ -111,7 +111,7 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF5B7399),
+        backgroundColor: const Color(0xFF4E6691),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
@@ -335,7 +335,7 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
                           style: TextStyle(fontSize: 14),
                         ),
                         contentPadding: EdgeInsets.zero,
-                        activeColor: const Color(0xFF4A6FA5),
+                        activeColor: const Color(0xFF4E6691),
                       ),
                     ),
                     Expanded(
@@ -352,7 +352,7 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
                           style: TextStyle(fontSize: 14),
                         ),
                         contentPadding: EdgeInsets.zero,
-                        activeColor: const Color(0xFF4A6FA5),
+                        activeColor: const Color(0xFF4E6691),
                       ),
                     ),
                   ],
@@ -366,7 +366,7 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
                   child: ElevatedButton(
                     onPressed: _submitForm,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5B7399),
+                      backgroundColor: const Color(0xFF4E6691),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -413,7 +413,7 @@ class RegistrationConfirmedScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF5B7399),
+        backgroundColor: const Color(0xFF4E6691),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),

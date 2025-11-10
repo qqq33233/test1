@@ -115,7 +115,7 @@ class _ReportScreenState extends State<ReportScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4A6FA5),
+        backgroundColor: const Color(0xFF4E6691),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
@@ -130,7 +130,7 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
         systemOverlayStyle: const SystemUiOverlayStyle(
-          statusBarColor: Color(0xFF4A6FA5),
+          statusBarColor: Color(0xFF4E6691),
           statusBarIconBrightness: Brightness.light,
         ),
       ),
@@ -308,7 +308,7 @@ class _ReportScreenState extends State<ReportScreen> {
               child: ElevatedButton(
                 onPressed: _uploadReport,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4A6FA5),
+                  backgroundColor: const Color(0xFF4E6691),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
