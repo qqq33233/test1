@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import cv2
 import numpy as np
@@ -84,6 +85,11 @@ easyocr_reader, EASYOCR_AVAILABLE = None, False
 print("[EasyOCR] EasyOCR will be initialized on first use (lazy loading)")
 
 app = FastAPI()
+
+# Mount static files for assets
+assets_path = os.path.join(os.path.dirname(__file__), 'assets')
+if os.path.exists(assets_path):
+    app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
 # Enable CORS for Flutter app
 app.add_middleware(
@@ -1040,7 +1046,7 @@ def index():
                 background: #f5f5f5;
             }
             .header {
-                background: #1976d2;
+                background: #4E6691;
                 color: white;
                 padding: 20px 40px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -1081,13 +1087,18 @@ def index():
             .module-icon {
                 width: 120px;
                 height: 120px;
-                background: #e3f2fd;
+                background: #E9F4FF;
                 border-radius: 16px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 margin: 0 auto 24px;
                 font-size: 60px;
+            }
+            .module-icon img {
+                width: 80px;
+                height: 80px;
+                object-fit: contain;
             }
             .module-title {
                 font-size: 18px;
@@ -1105,43 +1116,19 @@ def index():
             <div class="modules-container">
                 <a href="/console" class="module-card">
                     <div class="module-icon">
-                        <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <!-- Car -->
-                            <path d="M20 60 L30 50 L70 50 L80 60 L80 75 L20 75 Z" fill="#1976d2" stroke="#1976d2" stroke-width="2"/>
-                            <circle cx="35" cy="75" r="8" fill="#333"/>
-                            <circle cx="65" cy="75" r="8" fill="#333"/>
-                            <rect x="35" y="50" width="30" height="15" fill="#e3f2fd"/>
-                            <!-- Parking Sign -->
-                            <rect x="72" y="40" width="20" height="20" rx="2" fill="white" stroke="#1976d2" stroke-width="2"/>
-                            <text x="82" y="55" font-family="Arial" font-size="14" font-weight="bold" fill="#1976d2" text-anchor="middle">P</text>
-                        </svg>
+                        <img src="/assets/parking_logo.png" alt="Parking Spot Detector">
                     </div>
                     <div class="module-title">Parking Spot Detector</div>
                 </a>
                 <a href="/visitor-qr" class="module-card">
                     <div class="module-icon">
-                        <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <!-- ID Badge -->
-                            <rect x="25" y="20" width="50" height="70" rx="4" fill="white" stroke="#1976d2" stroke-width="3"/>
-                            <rect x="35" y="30" width="30" height="20" rx="2" fill="#e3f2fd" stroke="#1976d2" stroke-width="2"/>
-                            <!-- Person Icon -->
-                            <circle cx="50" cy="45" r="8" fill="#1976d2"/>
-                            <path d="M35 65 Q35 55 50 55 Q65 55 65 65" stroke="#1976d2" stroke-width="3" fill="none" stroke-linecap="round"/>
-                        </svg>
+                        <img src="/assets/visitor_logo.png" alt="QR Code Detector">
                     </div>
                     <div class="module-title">QR Code Detector</div>
                 </a>
                 <a href="/car-plate" class="module-card">
                     <div class="module-icon">
-                        <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <!-- Focus Frame -->
-                            <path d="M20 40 L20 20 L40 20" stroke="#1976d2" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M80 40 L80 20 L60 20" stroke="#1976d2" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M20 60 L20 80 L40 80" stroke="#1976d2" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M80 60 L80 80 L60 80" stroke="#1976d2" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                            <!-- Center rectangle -->
-                            <rect x="35" y="45" width="30" height="10" fill="#1976d2" opacity="0.3"/>
-                        </svg>
+                        <img src="/assets/scan_logo.png" alt="Car Plate Detector">
                     </div>
                     <div class="module-title">Car Plate Detector</div>
                 </a>
@@ -1159,35 +1146,40 @@ def console():
         <head>
             <title>🚗 Real-Time Parking Detection</title>
             <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
                 body { 
                     font-family: 'Segoe UI', Arial, sans-serif; 
                     background: #f5f5f5; 
-                    padding: 20px; 
                     margin: 0;
                 }
-                .back-link {
-                    display: inline-block;
-                    margin-bottom: 20px;
-                    color: #1976d2;
+                .header {
+                    background: #4E6691;
+                    color: white;
+                    padding: 16px 20px;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+                .back-arrow {
+                    cursor: pointer;
+                    font-size: 24px;
+                    color: white;
                     text-decoration: none;
+                }
+                .header-title {
+                    font-size: 20px;
                     font-weight: 600;
-                    padding: 8px 16px;
-                    border-radius: 8px;
-                    transition: background 0.2s;
-                }
-                .back-link:hover {
-                    background: #e3f2fd;
-                }
-                h2 {
-                    color: #333;
-                    margin-bottom: 20px;
-                    text-align: center;
                 }
                 .main-container {
                     display: flex;
-                    gap: 20px;
+                    gap: 12px;
                     max-width: 1600px;
-                    margin: 0 auto;
+                    margin: 20px auto;
+                    padding: 0 20px;
                     align-items: flex-start;
                 }
                 .video-container {
@@ -1241,7 +1233,7 @@ def console():
                     color: #2e7d32; 
                 }
                 .confirm-btn {
-                    background: #1976d2;
+                    background: #4E6691;
                     color: white;
                     border: none;
                     padding: 15px 50px;
@@ -1249,15 +1241,15 @@ def console():
                     font-weight: bold;
                     border-radius: 8px;
                     cursor: pointer;
-                    box-shadow: 0px 4px 10px rgba(25, 118, 210, 0.3);
+                    box-shadow: 0px 4px 10px rgba(78, 102, 145, 0.3);
                     transition: all 0.3s;
                     margin: 20px auto 0;
                     display: block;
                 }
                 .confirm-btn:hover {
-                    background: #1565c0;
+                    background: #3d5474;
                     transform: translateY(-2px);
-                    box-shadow: 0px 6px 15px rgba(25, 118, 210, 0.4);
+                    box-shadow: 0px 6px 15px rgba(78, 102, 145, 0.4);
                 }
                 .confirm-btn:active {
                     transform: translateY(0);
@@ -1390,10 +1382,10 @@ def console():
             </script>
         </head>
         <body>
-            <div style="max-width: 1600px; margin: 0 auto;">
-                <a href="/" class="back-link">← Back to Console</a>
+            <div class="header">
+                <a href="/" class="back-arrow">←</a>
+                <div class="header-title">Parking Spot Detector</div>
             </div>
-            <h2>🚗 Real-Time Parking Detection</h2>
             <div class="main-container">
                 <div class="video-container">
                     <img src="/video_feed" alt="Parking lot video feed">
@@ -1567,23 +1559,42 @@ def visitor_qr():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Visitor QR Code Detector</title>
         <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: #f5f5f5;
                 margin: 0;
-                padding: 20px;
+            }
+            .header {
+                background: #4E6691;
+                color: white;
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .back-arrow {
+                cursor: pointer;
+                font-size: 24px;
+                color: white;
+                text-decoration: none;
+            }
+            .header-title {
+                font-size: 20px;
+                font-weight: 600;
             }
             .container {
                 max-width: 1200px;
-                margin: 0 auto;
+                margin: 20px auto;
+                padding: 0 20px;
                 background: white;
                 padding: 20px;
                 border-radius: 12px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            h1 {
-                color: #1976d2;
-                margin-bottom: 20px;
             }
             .video-container {
                 text-align: center;
@@ -1613,33 +1624,40 @@ def visitor_qr():
                 background: #ffcdd2;
                 color: #c62828;
             }
-            a {
-                color: #1976d2;
-                text-decoration: none;
-                font-weight: 600;
-                display: inline-block;
-                margin-top: 20px;
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                background: #4E6691;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.3s;
             }
-            a:hover {
-                text-decoration: underline;
+            button:hover {
+                background: #3d5474;
+            }
+            button:disabled {
+                background: #9e9e9e;
+                cursor: not-allowed;
             }
         </style>
     </head>
     <body>
+        <div class="header">
+            <a href="/" class="back-arrow">←</a>
+            <div class="header-title">Visitor QR Code Detector</div>
+        </div>
         <div class="container">
-            <h1>Visitor QR Code Detector</h1>
             <div class="video-container">
                 <img src="/visitor_qr_video_feed" class="video-stream" alt="QR Code Scanner">
             </div>
             <div id="status" class="status">Point camera at QR code to scan...</div>
             <div class="controls">
-                <button id="approveBtn" onclick="approveVisitor()" style="padding: 10px 20px; font-size: 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Approve</button>
-                <button onclick="checkQRStatus()" style="padding: 10px 20px; font-size: 16px; background: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;">Check Status</button>
+                <button id="approveBtn" onclick="approveVisitor()">Approve</button>
             </div>
-            <a href="/">← Back to Console</a>
         </div>
         <script>
-            let lastCheckTime = 0;
             function checkQRStatus() {
                 fetch('/api/visitor/check-scan')
                     .then(response => response.json())
@@ -1650,14 +1668,10 @@ def visitor_qr():
                             statusDiv.textContent = 'QR Code detected: ' + data.qr_code + ' - Ready for approval';
                             statusDiv.className = 'status scan-success';
                             approveBtn.disabled = false;
-                            approveBtn.style.background = '#1976d2';
-                            approveBtn.style.cursor = 'pointer';
                         } else {
                             statusDiv.textContent = 'No QR code detected. Point camera at QR code.';
                             statusDiv.className = 'status';
                             approveBtn.disabled = true;
-                            approveBtn.style.background = '#9e9e9e';
-                            approveBtn.style.cursor = 'not-allowed';
                         }
                     })
                     .catch(error => {
@@ -1671,7 +1685,6 @@ def visitor_qr():
                 
                 // Disable button during processing
                 approveBtn.disabled = true;
-                approveBtn.style.background = '#9e9e9e';
                 approveBtn.textContent = 'Processing...';
                 
                 fetch('/api/visitor/check-scan')
@@ -1699,16 +1712,12 @@ def visitor_qr():
                             // Reset button after 2 seconds
                             setTimeout(() => {
                                 approveBtn.disabled = false;
-                                approveBtn.style.background = '#1976d2';
-                                approveBtn.style.cursor = 'pointer';
                                 approveBtn.textContent = 'Approve';
                             }, 2000);
                         } else {
                             statusDiv.textContent = 'Error: ' + (result.message || result.error || 'Failed to approve visitor');
                             statusDiv.className = 'status scan-error';
                             approveBtn.disabled = false;
-                            approveBtn.style.background = '#1976d2';
-                            approveBtn.style.cursor = 'pointer';
                             approveBtn.textContent = 'Approve';
                         }
                     })
@@ -1718,8 +1727,6 @@ def visitor_qr():
                         statusDiv.textContent = 'Error: ' + error.message;
                         statusDiv.className = 'status scan-error';
                         approveBtn.disabled = false;
-                        approveBtn.style.background = '#1976d2';
-                        approveBtn.style.cursor = 'pointer';
                         approveBtn.textContent = 'Approve';
                     });
             }
@@ -2006,23 +2013,42 @@ def car_plate():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Car Plate Detector</title>
         <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: #f5f5f5;
                 margin: 0;
-                padding: 20px;
+            }
+            .header {
+                background: #4E6691;
+                color: white;
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .back-arrow {
+                cursor: pointer;
+                font-size: 24px;
+                color: white;
+                text-decoration: none;
+            }
+            .header-title {
+                font-size: 20px;
+                font-weight: 600;
             }
             .container {
                 max-width: 1200px;
-                margin: 0 auto;
+                margin: 20px auto;
+                padding: 0 20px;
                 background: white;
                 padding: 20px;
                 border-radius: 12px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            h1 {
-                color: #1976d2;
-                margin-bottom: 20px;
             }
             .video-container {
                 text-align: center;
@@ -2051,35 +2077,28 @@ def car_plate():
             button {
                 padding: 10px 20px;
                 font-size: 16px;
-                background: #1976d2;
+                background: #4E6691;
                 color: white;
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
-                margin: 5px;
+                transition: all 0.3s;
             }
             button:hover {
-                background: #1565c0;
+                background: #3d5474;
             }
             button:disabled {
                 background: #9e9e9e;
                 cursor: not-allowed;
             }
-            a {
-                color: #1976d2;
-                text-decoration: none;
-                font-weight: 600;
-                display: inline-block;
-                margin-top: 20px;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
         </style>
     </head>
     <body>
+        <div class="header">
+            <a href="/" class="back-arrow">←</a>
+            <div class="header-title">Car Plate Detector</div>
+        </div>
         <div class="container">
-            <h1>Car Plate Detector</h1>
             <div class="video-container">
                 <img src="/car_plate_video_feed" class="video-stream" alt="Car Plate Scanner">
             </div>
@@ -2087,7 +2106,6 @@ def car_plate():
             <div class="controls">
                 <button id="scanBtn" onclick="scanCarPlate()">Scan Car Plate</button>
             </div>
-            <a href="/">← Back to Console</a>
         </div>
         <script>
             function scanCarPlate() {
@@ -2432,18 +2450,55 @@ async def process_visitor_qr(qr_code: str):
                 print(f"[Visitor QR] Document stdID: {doc_data.get('stdID', 'NOT SET')}")
                 print(f"[Visitor QR] Document data: {doc_data}")
                 
-                # Update status to "History"
-                doc.reference.update({'vstStatus': 'History'})
-                print(f"[Visitor QR] Successfully updated visitor reservation {doc.id} to History")
-                print(f"[Visitor QR] Updated document - stdID: {doc_data.get('stdID', 'NOT SET')}, vstStatus: History")
-                updated = True
+                # Check if this is first scan (no startTime) or second scan (has startTime but no endTime)
+                from datetime import datetime
+                from google.cloud.firestore import SERVER_TIMESTAMP
+                
+                start_time = doc_data.get('startTime')
+                end_time = doc_data.get('endTime')
+                
+                scan_type = None
+                if start_time is None:
+                    # First scan: Set startTime (car in), keep status as "Up Coming"
+                    current_time_utc = datetime.utcnow()
+                    update_data = {
+                        'startTime': current_time_utc,
+                    }
+                    doc.reference.update(update_data)
+                    print(f"[Visitor QR] First scan - Set startTime (car in) for reservation {doc.id}")
+                    scan_type = "first"
+                    updated = True
+                elif end_time is None:
+                    # Second scan: Set endTime (car out) and change status to "History"
+                    current_time_utc = datetime.utcnow()
+                    update_data = {
+                        'endTime': current_time_utc,
+                        'vstStatus': 'History',
+                    }
+                    doc.reference.update(update_data)
+                    print(f"[Visitor QR] Second scan - Set endTime (car out) and updated status to History for reservation {doc.id}")
+                    scan_type = "second"
+                    updated = True
+                else:
+                    # Already scanned twice, just acknowledge
+                    print(f"[Visitor QR] QR code already scanned twice for reservation {doc.id}")
+                    scan_type = "already_scanned"
+                    updated = True
                 break
             
             if updated:
+                if scan_type == "first":
+                    message = f"QR code {qr_code} scanned - Car In recorded. Scan again to record Car Out."
+                elif scan_type == "second":
+                    message = f"QR code {qr_code} scanned - Car Out recorded. Visitor moved to History."
+                else:
+                    message = f"QR code {qr_code} already scanned twice."
+                
                 return {
                     "success": True,
-                    "message": f"QR code {qr_code} scanned successfully. Visitor status updated to History.",
-                    "qr_code": qr_code
+                    "message": message,
+                    "qr_code": qr_code,
+                    "scan_type": scan_type
                 }
             else:
                 print(f"[Visitor QR] ERROR: No document found with vstQR or vstRsvtID matching: {qr_code}")

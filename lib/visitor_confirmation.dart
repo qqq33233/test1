@@ -253,24 +253,18 @@ class _VisitorConfirmationPageState extends State<VisitorConfirmationPage> {
         'vstDate': Timestamp.fromDate(visitDateTime),
       });
 
-      // Set start time and end time (start time = visit date at 19:00, end time at 20:32:44)
-      final startTime = DateTime(visitDateTime.year, visitDateTime.month, visitDateTime.day, 19, 0, 0)
-          .subtract(const Duration(hours: 8)); // Convert to UTC
-      final endTime = DateTime(visitDateTime.year, visitDateTime.month, visitDateTime.day, 20, 32, 44)
-          .subtract(const Duration(hours: 8)); // Convert to UTC
-
       // Generate QR code data (using vstRsvtID as unique identifier)
       final qrCodeData = vstRsvtID;
 
       // Prepare reservation data
+      // Note: startTime and endTime will be set when QR code is scanned (first scan = startTime, second scan = endTime)
       final reservationData = <String, dynamic>{
         'vstRsvtID': vstRsvtID,
         'vstID': vstID,
         'vstDate': Timestamp.fromDate(visitDateTime),
-        'startTime': Timestamp.fromDate(startTime),
-        'endTime': Timestamp.fromDate(endTime),
         'vstStatus': 'Up Coming',
         'vstQR': qrCodeData,
+        // startTime and endTime will be set when QR code is scanned
       };
       
       // Add student ID if visitor is created by a logged-in student

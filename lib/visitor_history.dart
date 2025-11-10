@@ -79,7 +79,7 @@ class VisitorHistoryPage extends StatelessWidget {
                   );
                 }
 
-                // Filter based on studentId and ensure status is "History"
+                // Filter based on studentId, ensure status is "History", and endTime exists
                 List<QueryDocumentSnapshot> filteredDocs = [];
                 if (snapshot.hasData) {
                   filteredDocs = snapshot.data!.docs.where((doc) {
@@ -89,6 +89,13 @@ class VisitorHistoryPage extends StatelessWidget {
                     final status = data['vstStatus'] as String?;
                     if (status == null || status.trim() != 'History') {
                       print('Visitor History: Filtering out doc ${doc.id} - status is "$status" (not "History")');
+                      return false;
+                    }
+                    
+                    // Only show records where endTime exists (second scan completed)
+                    final endTime = data['endTime'];
+                    if (endTime == null) {
+                      print('Visitor History: Filtering out doc ${doc.id} - endTime is null (not yet scanned out)');
                       return false;
                     }
                     
@@ -187,7 +194,8 @@ class VisitorHistoryPage extends StatelessWidget {
                         String timeIn = '--:--';
                         String timeOut = '--:--';
                         if (startTime != null) {
-                          final startDateTime = startTime.toDate();
+                          // Firebase Timestamp is stored in UTC, convert to UTC+8
+                          final startDateTime = startTime.toDate().toUtc();
                           final utc8Start = startDateTime.add(const Duration(hours: 8));
                           final hour = utc8Start.hour;
                           final minute = utc8Start.minute;
@@ -196,7 +204,8 @@ class VisitorHistoryPage extends StatelessWidget {
                           timeIn = '$displayHour:${minute.toString().padLeft(2, '0')}$period';
                         }
                         if (endTime != null) {
-                          final endDateTime = endTime.toDate();
+                          // Firebase Timestamp is stored in UTC, convert to UTC+8
+                          final endDateTime = endTime.toDate().toUtc();
                           final utc8End = endDateTime.add(const Duration(hours: 8));
                           final hour = utc8End.hour;
                           final minute = utc8End.minute;
