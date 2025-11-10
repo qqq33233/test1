@@ -139,7 +139,7 @@ class _StaffLoginState extends State<StaffLogin> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Header Bar
+          // Header Bar with back button
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -151,13 +151,26 @@ class _StaffLoginState extends State<StaffLogin> {
             decoration: const BoxDecoration(
               color: Color(0xFF8B4F52),
             ),
-            child: const Text(
-              'Staff Login',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(
+                    Icons.chevron_left,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Staff Login',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
 

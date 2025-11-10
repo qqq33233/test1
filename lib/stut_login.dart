@@ -122,7 +122,7 @@ class _StutLoginState extends State<StutLogin> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Header Bar - Full width
+          // Header Bar - Full width with back button
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -134,13 +134,26 @@ class _StutLoginState extends State<StutLogin> {
             decoration: const BoxDecoration(
               color: Color(0xFF4E6691), // New blue color
             ),
-            child: const Text(
-              'Student Login',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(
+                    Icons.chevron_left,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Student Login',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
           
@@ -266,26 +279,7 @@ class _StutLoginState extends State<StutLogin> {
                 ),
                 
                 const SizedBox(height: 40),
-                
-                // Visitor Link
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => LoginVisitorPage(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'If you are a visitor, click here',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.black87,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
+
                 
                   const SizedBox(height: 40),
                 ],
