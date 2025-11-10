@@ -23,10 +23,26 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
     // Initialize date with current system date
     final currentDate = DateTime.now();
     _visitDateController = TextEditingController(text: _formatDate(currentDate));
+    
+    // Add listeners to update UI when fields change
+    _visitorNameController.addListener(_onFieldChanged);
+    _contactNumberController.addListener(_onFieldChanged);
+    _vehicleNumberController.addListener(_onFieldChanged);
+    _visitDateController.addListener(_onFieldChanged);
+  }
+  
+  void _onFieldChanged() {
+    setState(() {
+      // Trigger rebuild to update button state
+    });
   }
 
   @override
   void dispose() {
+    _visitorNameController.removeListener(_onFieldChanged);
+    _contactNumberController.removeListener(_onFieldChanged);
+    _vehicleNumberController.removeListener(_onFieldChanged);
+    _visitDateController.removeListener(_onFieldChanged);
     _visitorNameController.dispose();
     _contactNumberController.dispose();
     _vehicleNumberController.dispose();
@@ -60,6 +76,84 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
     final year = date.year;
     
     return '$weekday, $day $month $year';
+  }
+
+  bool _validateFields() {
+    final visitorName = _visitorNameController.text.trim();
+    final contactNumber = _contactNumberController.text.trim();
+    final vehicleNumber = _vehicleNumberController.text.trim();
+    final visitDate = _visitDateController.text.trim();
+
+    if (visitorName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter visitor name'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return false;
+    }
+
+    if (contactNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter contact number'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return false;
+    }
+
+    if (vehicleNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter vehicle number'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return false;
+    }
+
+    if (visitDate.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select visit date'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _isFormValid() {
+    return _visitorNameController.text.trim().isNotEmpty &&
+           _contactNumberController.text.trim().isNotEmpty &&
+           _vehicleNumberController.text.trim().isNotEmpty &&
+           _visitDateController.text.trim().isNotEmpty;
+  }
+
+  void _handleNext() {
+    if (_validateFields()) {
+      // Navigate to confirmation page with visitor data
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VisitorConfirmationPage(
+            visitorName: _visitorNameController.text.trim(),
+            contactNumber: _contactNumberController.text.trim(),
+            vehicleNumber: _vehicleNumberController.text.trim(),
+            visitDate: _visitDateController.text.trim(),
+            studentId: widget.studentId,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -133,8 +227,9 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F7F7),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCFCFCF)),
                     ),
                     child: TextField(
                       controller: _visitorNameController,
@@ -162,8 +257,9 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F7F7),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCFCFCF)),
                     ),
                     child: TextField(
                       controller: _contactNumberController,
@@ -192,8 +288,9 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F7F7),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCFCFCF)),
                     ),
                     child: TextField(
                       controller: _vehicleNumberController,
@@ -223,8 +320,9 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                     onTap: _selectDate,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFCFCFCF)),
                       ),
                       child: TextField(
                         controller: _visitDateController,
@@ -254,24 +352,12 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             child: ElevatedButton(
-              onPressed: () {
-                // Navigate to confirmation page with visitor data
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => VisitorConfirmationPage(
-                      visitorName: _visitorNameController.text,
-                      contactNumber: _contactNumberController.text,
-                      vehicleNumber: _vehicleNumberController.text,
-                      visitDate: _visitDateController.text,
-                      studentId: widget.studentId,
-                    ),
-                  ),
-                );
-              },
+              onPressed: _isFormValid() ? _handleNext : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4E6691),
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey[300],
+                disabledForegroundColor: Colors.grey[600],
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),

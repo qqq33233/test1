@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'home_page.dart';
 import 'stut_login.dart';
 import 'message.dart';
+import 'carPlate_scanner.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? studentId;
@@ -641,7 +642,15 @@ class _ProfilePageState extends State<ProfilePage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(40),
               onTap: () {
-                // Handle scan button tap
+                // Navigate to car plate scanner page
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CarPlateScannerPage(
+                      loggedInStudentId: widget.studentId,
+                    ),
+                  ),
+                );
               },
               child: Center(
                 child: Container(

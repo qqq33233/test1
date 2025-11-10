@@ -34,9 +34,9 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
   @override
   void initState() {
     super.initState();
-    // Set default times to 12:00 PM (noon) when no car plate is scanned
-    startTime = const TimeOfDay(hour: 12, minute: 0); // 12:00 PM (noon)
-    endTime = const TimeOfDay(hour: 12, minute: 0); // 12:00 PM (noon)
+    // Set default times to 00:00 AM to 00:00 PM when no car plate is scanned
+    startTime = const TimeOfDay(hour: 0, minute: 0); // 00:00 AM (midnight)
+    endTime = const TimeOfDay(hour: 0, minute: 0); // Will display as 00:00 PM when no car plate scanned
     
     // Start polling for scanned results from backend
     _startPolling();
@@ -74,10 +74,10 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
             setState(() {
               vehicleNumber = plateNumber;
               scannedStudentId = null; // Reset scanned student ID
-              // Reset times to default (12:00 PM) when new plate is scanned
+              // Reset times to default (00:00 AM to 00:00 PM) when new plate is scanned
               // These will be updated from database if found
-              startTime = const TimeOfDay(hour: 12, minute: 0); // 12:00 PM
-              endTime = const TimeOfDay(hour: 12, minute: 0); // 12:00 PM
+              startTime = const TimeOfDay(hour: 0, minute: 0); // 00:00 AM
+              endTime = const TimeOfDay(hour: 0, minute: 0); // Will display as 00:00 PM initially
             });
             
             // Load car status from Firebase (this will update times if found in database)
@@ -102,10 +102,12 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
   }
 
   String _formatTimeOfDay(TimeOfDay time) {
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    // Format to show 00:00 AM for midnight (hour 0)
+    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 0 : time.hour);
     final minute = time.minute.toString().padLeft(2, '0');
     final period = time.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
+    final hourStr = hour.toString().padLeft(2, '0');
+    return '$hourStr:$minute $period';
   }
 
   Future<void> _selectStartTime() async {
@@ -352,34 +354,6 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
           children: [
             const SizedBox(height: 24),
             
-            // Info message
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: Color(0xFF4E6691), size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Please scan car plate from backend console. Results will appear here automatically.',
-                      style: TextStyle(
-                        color: Color(0xFF4E6691),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
             // Vehicle Number Section
             const Text(
               'Vehicle Number',
@@ -394,8 +368,9 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFCFCFCF)),
               ),
               child: Text(
                 vehicleNumber.isEmpty ? 'Not scanned' : vehicleNumber,
@@ -423,8 +398,9 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFCFCFCF)),
               ),
               child: Text(
                 carStatus.isEmpty ? 'Not scanned' : carStatus,
@@ -452,25 +428,44 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
               children: [
                 // Start Time
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _selectStartTime,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        startTime != null ? _formatTimeOfDay(startTime!) : '12:00 PM',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  child: vehicleNumber.isEmpty
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCFCFCF)),
+                          ),
+                          child: const Text(
+                            '00:00 AM',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : GestureDetector(
+                          onTap: _selectStartTime,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFCFCFCF)),
+                            ),
+                            child: Text(
+                              startTime != null ? _formatTimeOfDay(startTime!) : '00:00 AM',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
                 ),
                 
                 const SizedBox(width: 12),
@@ -489,25 +484,44 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
                 
                 // End Time
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _selectEndTime,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        endTime != null ? _formatTimeOfDay(endTime!) : '12:00 PM',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  child: vehicleNumber.isEmpty
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCFCFCF)),
+                          ),
+                          child: const Text(
+                            '00:00 PM',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : GestureDetector(
+                          onTap: _selectEndTime,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFCFCFCF)),
+                            ),
+                            child: Text(
+                              endTime != null ? _formatTimeOfDay(endTime!) : '12:00 PM',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -547,6 +561,34 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            
+            // Info message
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Color(0xFF4E6691), size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Please scan car plate from backend console. Results will appear here automatically.',
+                      style: TextStyle(
+                        color: Color(0xFF4E6691),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

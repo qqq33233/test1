@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class ParkingReservation extends StatefulWidget {
   final String studentId;
-  
+
   const ParkingReservation({super.key, required this.studentId});
 
   @override
@@ -15,17 +16,62 @@ class _ParkingReservationState extends State<ParkingReservation>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  Timer? _expirationTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // Check for expired reservations every minute
+    _expirationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _checkAndUpdateExpiredReservations();
+    });
+    // Also check immediately when page loads
+    _checkAndUpdateExpiredReservations();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _expirationTimer?.cancel();
     super.dispose();
+  }
+
+  // Check and update reservations that are older than 5 minutes
+  Future<void> _checkAndUpdateExpiredReservations() async {
+    try {
+      final now = DateTime.now();
+      // Get all upcoming reservations for this student
+      final upcomingReservations = await _firestore
+          .collection('ParkingSpotReservation')
+          .where('stdID', isEqualTo: widget.studentId)
+          .where('spotRsvtStatus', isEqualTo: 'UpComing')
+          .get();
+
+      for (var doc in upcomingReservations.docs) {
+        final data = doc.data();
+        final rsvTime = data['rsvTime'] as Timestamp?;
+        
+        if (rsvTime != null) {
+          // Convert UTC timestamp to UTC+8 for comparison
+          final reservationTime = rsvTime.toDate();
+          final utc8ReservationTime = reservationTime.add(const Duration(hours: 8));
+          
+          // Calculate difference in minutes
+          final difference = now.difference(utc8ReservationTime);
+          
+          // If 5 minutes or more have passed, update to History
+          if (difference.inMinutes >= 5) {
+            await doc.reference.update({
+              'spotRsvtStatus': 'History',
+            });
+            print('Updated reservation ${doc.id} to History (${difference.inMinutes} minutes old)');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error checking expired reservations: $e');
+    }
   }
 
   // Debug function to check Firebase data
@@ -36,11 +82,9 @@ class _ParkingReservationState extends State<ParkingReservation>
           .collection('ParkingSpotReservation')
           .where('stdID', isEqualTo: widget.studentId)
           .get();
-      
       print('DEBUG: ==========================================');
       print('DEBUG: Student ID: ${widget.studentId}');
       print('DEBUG: Total documents found: ${allDocs.docs.length}');
-      
       for (var doc in allDocs.docs) {
         final data = doc.data();
         print('DEBUG: Document ID: ${doc.id}');
@@ -51,13 +95,11 @@ class _ParkingReservationState extends State<ParkingReservation>
         print('DEBUG:   - rsvTime: ${data['rsvTime']}');
         print('DEBUG: ---');
       }
-      
       // Also check all documents without filter
       final allDocsNoFilter = await _firestore
           .collection('ParkingSpotReservation')
           .limit(10)
           .get();
-      
       print('DEBUG: First 10 documents in collection (no filter):');
       for (var doc in allDocsNoFilter.docs) {
         final data = doc.data();
@@ -227,24 +269,30 @@ class _ParkingReservationState extends State<ParkingReservation>
           itemBuilder: (context, index) {
             final doc = sortedDocs[index];
             final data = doc.data() as Map<String, dynamic>;
-            
             final rsvTime = data['rsvTime'] as Timestamp?;
             final location = data['spotLocation'] as String? ?? 'Unknown';
             final reservationId = doc.id;
-            
             String dateText = 'Unknown date';
+            String timeText = '';
             if (rsvTime != null) {
               // Convert UTC+8 timestamp to local DateTime for display
               final dateTime = rsvTime.toDate();
               // Add 8 hours to convert from UTC to UTC+8
               final utc8DateTime = dateTime.add(const Duration(hours: 8));
               dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+              // Format time in 12-hour format
+              final hour = utc8DateTime.hour;
+              final minute = utc8DateTime.minute;
+              final period = hour >= 12 ? 'PM' : 'AM';
+              final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+              timeText = '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}$period';
             }
 
             return Padding(
               padding: EdgeInsets.only(bottom: index < sortedDocs.length - 1 ? 12 : 0),
               child: _buildReservationCard(
                 date: dateText,
+                time: timeText,
                 location: location,
                 reservationId: reservationId,
                 onDelete: () {
@@ -316,23 +364,29 @@ class _ParkingReservationState extends State<ParkingReservation>
           itemBuilder: (context, index) {
             final doc = sortedDocs[index];
             final data = doc.data() as Map<String, dynamic>;
-            
             final rsvTime = data['rsvTime'] as Timestamp?;
             final location = data['spotLocation'] as String? ?? 'Unknown';
-            
             String dateText = 'Unknown date';
+            String timeText = '';
             if (rsvTime != null) {
               // Convert UTC+8 timestamp to local DateTime for display
               final dateTime = rsvTime.toDate();
               // Add 8 hours to convert from UTC to UTC+8
               final utc8DateTime = dateTime.add(const Duration(hours: 8));
               dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+              // Format time in 12-hour format
+              final hour = utc8DateTime.hour;
+              final minute = utc8DateTime.minute;
+              final period = hour >= 12 ? 'PM' : 'AM';
+              final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+              timeText = '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}$period';
             }
 
             return Padding(
               padding: EdgeInsets.only(bottom: index < sortedDocs.length - 1 ? 12 : 0),
               child: _buildReservationCard(
                 date: dateText,
+                time: timeText,
                 location: location,
                 isHistory: true,
               ),
@@ -345,57 +399,82 @@ class _ParkingReservationState extends State<ParkingReservation>
 
   Widget _buildReservationCard({
     required String date,
+    String time = '',
     required String location,
     bool isHistory = false,
     String? reservationId,
     VoidCallback? onDelete,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.15),
-            spreadRadius: 1,
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Text Section
-          Expanded(
+    // Card with trash icon outside
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Card Container (without trash icon)
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.15),
+                  spreadRadius: 1,
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  date,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
+                // Date and time on same line
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      date,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.normal,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (time.isNotEmpty)
+                      Text(
+                        time,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.normal,
+                          color: Colors.black87,
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 8),
+                // Separator line
+                Container(
+                  height: 1,
+                  color: Colors.grey.withOpacity(0.3),
+                  margin: const EdgeInsets.only(bottom: 8),
+                ),
+                // Location row with label left and value right
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
                       'Location',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
+                        fontWeight: FontWeight.normal,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Text(
                       location,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.bold,
                         color: Colors.black87,
                       ),
                     ),
@@ -404,27 +483,33 @@ class _ParkingReservationState extends State<ParkingReservation>
               ],
             ),
           ),
+        ),
 
-          // Delete Icon
-          if (!isHistory && onDelete != null)
-            GestureDetector(
-              onTap: onDelete,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE9F4FF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Color(0xFF4E6691),
-                  size: 20,
+        // Delete Icon (outside the card)
+        if (!isHistory && onDelete != null) ...[
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9F4FF),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFE9F4FF),
+                  width: 1,
                 ),
               ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.black87,
+                size: 20,
+              ),
             ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -531,7 +616,7 @@ class _ParkingReservationState extends State<ParkingReservation>
           .collection('ParkingSpotReservation')
           .doc(reservationId)
           .delete();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
