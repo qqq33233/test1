@@ -3,6 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
+// Helper function to convert UTC time to local timezone
+DateTime _convertToLocalTime(DateTime utcTime) {
+  // Add 8 hours to match local timezone
+  return utcTime.add(const Duration(hours: 16));
+}
+
 class ParkingReservation extends StatefulWidget {
   final String studentId;
 
@@ -41,7 +47,35 @@ class _ParkingReservationState extends State<ParkingReservation>
   Future<void> _checkAndUpdateExpiredReservations() async {
     try {
       final now = DateTime.now();
-      // Get all upcoming reservations for this student
+      
+      // Get all Reserved reservations (temporary reservations - need to be released after 5 minutes)
+      final reservedReservations = await _firestore
+          .collection('ParkingSpotReservation')
+          .where('spotRsvtStatus', isEqualTo: 'Reserved')
+          .get();
+
+      // Release Reserved spots that are older than 5 minutes
+      for (var doc in reservedReservations.docs) {
+        final data = doc.data();
+        final rsvTime = data['rsvTime'] as Timestamp?;
+        
+        if (rsvTime != null) {
+          // Convert UTC timestamp to local timezone for comparison
+          final reservationTime = rsvTime.toDate();
+          final localReservationTime = _convertToLocalTime(reservationTime);
+          
+          // Calculate difference in minutes
+          final difference = now.difference(localReservationTime);
+          
+          // If 5 minutes or more have passed, delete the reservation (release the spot)
+          if (difference.inMinutes >= 5) {
+            await doc.reference.delete();
+            print('Released reserved spot ${doc.id} (${difference.inMinutes} minutes old) - spot now available to others');
+          }
+        }
+      }
+      
+      // Get all upcoming reservations for this student (confirmed reservations)
       final upcomingReservations = await _firestore
           .collection('ParkingSpotReservation')
           .where('stdID', isEqualTo: widget.studentId)
@@ -53,12 +87,12 @@ class _ParkingReservationState extends State<ParkingReservation>
         final rsvTime = data['rsvTime'] as Timestamp?;
         
         if (rsvTime != null) {
-          // Convert UTC timestamp to UTC+8 for comparison
+          // Convert UTC timestamp to local timezone for comparison
           final reservationTime = rsvTime.toDate();
-          final utc8ReservationTime = reservationTime.add(const Duration(hours: 8));
+          final localReservationTime = _convertToLocalTime(reservationTime);
           
           // Calculate difference in minutes
-          final difference = now.difference(utc8ReservationTime);
+          final difference = now.difference(localReservationTime);
           
           // If 5 minutes or more have passed, update to History
           if (difference.inMinutes >= 5) {
@@ -204,7 +238,7 @@ class _ParkingReservationState extends State<ParkingReservation>
       stream: _firestore
           .collection('ParkingSpotReservation')
           .where('stdID', isEqualTo: widget.studentId)
-          .where('spotRsvtStatus', isEqualTo: 'UpComing')
+          .where('spotRsvtStatus', whereIn: ['Reserved', 'UpComing'])
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -276,14 +310,13 @@ class _ParkingReservationState extends State<ParkingReservation>
             String dateText = 'Unknown date';
             String timeText = '';
             if (rsvTime != null) {
-              // Convert UTC+8 timestamp to local DateTime for display
+              // Convert UTC timestamp to local DateTime for display
               final dateTime = rsvTime.toDate();
-              // Add 8 hours to convert from UTC to UTC+8
-              final utc8DateTime = dateTime.add(const Duration(hours: 8));
-              dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+              final localDateTime = _convertToLocalTime(dateTime);
+              dateText = DateFormat('MMM dd, yyyy').format(localDateTime);
               // Format time in 12-hour format
-              final hour = utc8DateTime.hour;
-              final minute = utc8DateTime.minute;
+              final hour = localDateTime.hour;
+              final minute = localDateTime.minute;
               final period = hour >= 12 ? 'PM' : 'AM';
               final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
               timeText = '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}$period';
@@ -372,14 +405,13 @@ class _ParkingReservationState extends State<ParkingReservation>
             String dateText = 'Unknown date';
             String timeText = '';
             if (rsvTime != null) {
-              // Convert UTC+8 timestamp to local DateTime for display
+              // Convert UTC timestamp to local DateTime for display
               final dateTime = rsvTime.toDate();
-              // Add 8 hours to convert from UTC to UTC+8
-              final utc8DateTime = dateTime.add(const Duration(hours: 8));
-              dateText = DateFormat('MMM dd, yyyy').format(utc8DateTime);
+              final localDateTime = _convertToLocalTime(dateTime);
+              dateText = DateFormat('MMM dd, yyyy').format(localDateTime);
               // Format time in 12-hour format
-              final hour = utc8DateTime.hour;
-              final minute = utc8DateTime.minute;
+              final hour = localDateTime.hour;
+              final minute = localDateTime.minute;
               final period = hour >= 12 ? 'PM' : 'AM';
               final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
               timeText = '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}$period';

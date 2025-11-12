@@ -7,6 +7,12 @@ import 'home_page.dart';
 import 'profile.dart';
 import 'chat_page.dart';
 
+// Helper function to convert UTC time to local timezone
+DateTime _convertToLocalTime(DateTime utcTime) {
+  // Add 8 hours to match local timezone
+  return utcTime.add(const Duration(hours: 16));
+}
+
 class MessagePage extends StatefulWidget {
   final String? studentId;
   
@@ -21,17 +27,132 @@ class _MessagePageState extends State<MessagePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<MessageItem> _messages = [];
   StreamSubscription<QuerySnapshot>? _messagesSubscription;
+  bool _hasUnreadMessages = false;
+  StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription1;
+  StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription2;
+  List<QuerySnapshot> _messageSnapshots = [];
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
+    _checkUnreadMessages();
+    _markAllAsRead();
+  }
+
+  // Mark all conversations as read when message page is opened
+  Future<void> _markAllAsRead() async {
+    if (widget.studentId == null) return;
+    
+    try {
+      // Get all conversations where current user is involved
+      final query1 = await _firestore
+          .collection('messages')
+          .where('stdID1', isEqualTo: widget.studentId)
+          .get();
+      
+      final query2 = await _firestore
+          .collection('messages')
+          .where('stdID2', isEqualTo: widget.studentId)
+          .get();
+      
+      final batch = _firestore.batch();
+      final now = FieldValue.serverTimestamp();
+      
+      for (var doc in query1.docs) {
+        batch.update(doc.reference, {
+          'lastReadBy_${widget.studentId}': now,
+        });
+      }
+      
+      for (var doc in query2.docs) {
+        batch.update(doc.reference, {
+          'lastReadBy_${widget.studentId}': now,
+        });
+      }
+      
+      await batch.commit();
+      
+      // Update local state to hide red dot immediately
+      if (mounted) {
+        setState(() {
+          _hasUnreadMessages = false;
+        });
+      }
+    } catch (e) {
+      print('[Message Page] Error marking messages as read: $e');
+    }
   }
 
   @override
   void dispose() {
     _messagesSubscription?.cancel();
+    _unreadMessagesSubscription1?.cancel();
+    _unreadMessagesSubscription2?.cancel();
     super.dispose();
+  }
+
+  void _checkUnreadMessages() {
+    if (widget.studentId == null) return;
+
+    // Listen for messages where current student is stdID1
+    _unreadMessagesSubscription1 = _firestore
+        .collection('messages')
+        .where('stdID1', isEqualTo: widget.studentId)
+        .snapshots()
+        .listen((snapshot) {
+      _updateUnreadStatus(snapshot, 0);
+    });
+
+    // Listen for messages where current student is stdID2
+    _unreadMessagesSubscription2 = _firestore
+        .collection('messages')
+        .where('stdID2', isEqualTo: widget.studentId)
+        .snapshots()
+        .listen((snapshot) {
+      _updateUnreadStatus(snapshot, 1);
+    });
+  }
+
+  void _updateUnreadStatus(QuerySnapshot snapshot, int index) {
+    // Store snapshot at the appropriate index
+    if (_messageSnapshots.length <= index) {
+      _messageSnapshots.addAll(List.filled(index + 1 - _messageSnapshots.length, snapshot));
+    } else {
+      _messageSnapshots[index] = snapshot;
+    }
+    
+    // Check all snapshots for unread messages
+    // Message is unread if lastSenderId is not the current user AND
+    // the lastUpdated time is after the last read time
+    bool hasUnread = false;
+    for (var snap in _messageSnapshots) {
+      for (var doc in snap.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          final lastSenderId = data['lastSenderId'] as String?;
+          if (lastSenderId != null && lastSenderId != widget.studentId) {
+            final lastUpdatedUtc = (data['lastUpdated'] as Timestamp?)?.toDate();
+            final lastReadTimeUtc = (data['lastReadBy_${widget.studentId}'] as Timestamp?)?.toDate();
+            final lastUpdated = lastUpdatedUtc != null ? _convertToLocalTime(lastUpdatedUtc) : null;
+            final lastReadTime = lastReadTimeUtc != null ? _convertToLocalTime(lastReadTimeUtc) : null;
+            if (lastUpdated != null) {
+              if (lastReadTime == null || lastUpdated.isAfter(lastReadTime)) {
+                hasUnread = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (hasUnread) break;
+    }
+    
+    if (mounted) {
+      setState(() {
+        _hasUnreadMessages = hasUnread;
+      });
+    }
   }
 
   void _loadMessages() {
@@ -62,27 +183,32 @@ class _MessagePageState extends State<MessagePage> {
     });
   }
 
-  void _processMessages(QuerySnapshot snapshot) {
+  void _processMessages(QuerySnapshot snapshot) async {
     if (!mounted) return;
 
-    final newMessages = snapshot.docs.map((doc) {
+    final List<MessageItem> newMessages = [];
+    
+    for (var doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>?;
       if (data == null) {
-        return MessageItem(
+        newMessages.add(MessageItem(
           senderName: 'Student',
           message: 'No messages',
           time: DateTime.now(),
           profileImage: 'assets/profile.png',
           studentId: null,
-        );
+          chatId: doc.id,
+          isUnread: false,
+        ));
+        continue;
       }
 
       final lastMessage = data['lastMessage'] as String? ?? 'No messages';
-      final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now();
+      final lastUpdatedUtc = (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now();
+      final lastUpdated = _convertToLocalTime(lastUpdatedUtc);
       
-      // Determine recipient student ID and sender name (match Firebase field names)
+      // Determine recipient student ID (the other person in the chat)
       String? recipientStudentId;
-      String senderName = 'Student';
       
       if (data['stdID1'] == widget.studentId) { // Match Firebase: stdID1
         recipientStudentId = data['stdID2'] as String?; // Match Firebase: stdID2
@@ -90,25 +216,56 @@ class _MessagePageState extends State<MessagePage> {
         recipientStudentId = data['stdID1'] as String?; // Match Firebase: stdID1
       }
       
-      if (data['lastSenderId'] == widget.studentId) {
-        senderName = 'You';
-      } else if (recipientStudentId != null) {
-        // Get recipient student name
-        senderName = 'Student $recipientStudentId';
+      // Always get the name of the person we're chatting with
+      String senderName = 'Student';
+      if (recipientStudentId != null) {
+        try {
+          final studentQuery = await _firestore
+              .collection('student')
+              .where('stdID', isEqualTo: recipientStudentId)
+              .limit(1)
+              .get();
+          
+          if (studentQuery.docs.isNotEmpty) {
+            final studentData = studentQuery.docs.first.data();
+            senderName = studentData['stdName'] as String? ?? 'Student $recipientStudentId';
+          } else {
+            senderName = 'Student $recipientStudentId';
+          }
+        } catch (e) {
+          print('[Message Page] Error fetching student name: $e');
+          senderName = 'Student $recipientStudentId';
+        }
       }
       
-      return MessageItem(
+      // Check if message is unread
+      // Message is unread if lastSenderId is not the current user AND
+      // the lastUpdated time is after the last read time
+      bool isUnread = false;
+      if (data['lastSenderId'] != null && data['lastSenderId'] != widget.studentId) {
+        final lastReadTimeUtc = (data['lastReadBy_${widget.studentId}'] as Timestamp?)?.toDate();
+        final lastReadTime = lastReadTimeUtc != null ? _convertToLocalTime(lastReadTimeUtc) : null;
+        if (lastReadTime == null || lastUpdated.isAfter(lastReadTime)) {
+          isUnread = true;
+        }
+      }
+      
+      newMessages.add(MessageItem(
         senderName: senderName,
         message: lastMessage,
         time: lastUpdated,
         profileImage: 'assets/profile.png',
         studentId: recipientStudentId,
-      );
-    }).toList();
+        chatId: doc.id,
+        isUnread: isUnread,
+      ));
+    }
 
-    setState(() {
-      _messages = newMessages;
-    });
+    if (mounted) {
+      setState(() {
+        _messages = newMessages;
+      });
+    }
   }
 
   @override
@@ -245,7 +402,18 @@ class _MessagePageState extends State<MessagePage> {
     final timeFormat = DateFormat('h:mm a').format(message.time);
     
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
+        // Mark this conversation as read before navigating
+        if (message.chatId != null && widget.studentId != null) {
+          try {
+            await _firestore.collection('messages').doc(message.chatId).update({
+              'lastReadBy_${widget.studentId}': FieldValue.serverTimestamp(),
+            });
+          } catch (e) {
+            print('[Message Page] Error marking conversation as read: $e');
+          }
+        }
+        
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -254,9 +422,13 @@ class _MessagePageState extends State<MessagePage> {
               currentStudentId: widget.studentId, // Current logged-in student
               recipientStudentId: message.studentId, // Other student in the chat
               profileImage: message.profileImage,
+              chatId: message.chatId,
             ),
           ),
-        );
+        ).then((_) {
+          // Refresh messages when returning from chat
+          _loadMessages();
+        });
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -301,12 +473,29 @@ class _MessagePageState extends State<MessagePage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        timeFormat,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            timeFormat,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          if (message.isUnread) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -331,6 +520,7 @@ class _MessagePageState extends State<MessagePage> {
 
   Widget _buildNavItem(String imagePath, String label, int index) {
     final isSelected = _selectedIndex == index;
+    final showBadge = label == 'Message' && _hasUnreadMessages;
     
     return GestureDetector(
       onTap: () {
@@ -362,11 +552,29 @@ class _MessagePageState extends State<MessagePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              imagePath,
-              width: 24,
-              height: 24,
-              fit: BoxFit.contain,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Image.asset(
+                  imagePath,
+                  width: 24,
+                  height: 24,
+                  fit: BoxFit.contain,
+                ),
+                if (showBadge)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 2),
             Text(
@@ -390,6 +598,8 @@ class MessageItem {
   final DateTime time;
   final String profileImage;
   final String? studentId;
+  final String? chatId;
+  final bool isUnread;
 
   MessageItem({
     required this.senderName,
@@ -397,6 +607,8 @@ class MessageItem {
     required this.time,
     required this.profileImage,
     this.studentId,
+    this.chatId,
+    this.isUnread = false,
   });
 }
 
