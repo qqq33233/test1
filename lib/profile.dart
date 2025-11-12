@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,11 +35,84 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _profileImageUrl; // Profile image URL from Firebase Storage
   final ImagePicker _imagePicker = ImagePicker();
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  bool _hasUnreadMessages = false;
+  StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription1;
+  StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription2;
+  List<QuerySnapshot> _messageSnapshots = [];
 
   @override
   void initState() {
     super.initState();
     _loadStudentData();
+    _checkUnreadMessages();
+  }
+
+  @override
+  void dispose() {
+    _unreadMessagesSubscription1?.cancel();
+    _unreadMessagesSubscription2?.cancel();
+    super.dispose();
+  }
+
+  void _checkUnreadMessages() {
+    if (widget.studentId == null) return;
+
+    // Listen for messages where current student is stdID1
+    _unreadMessagesSubscription1 = _firestore
+        .collection('messages')
+        .where('stdID1', isEqualTo: widget.studentId)
+        .snapshots()
+        .listen((snapshot) {
+      _updateUnreadStatus(snapshot, 0);
+    });
+
+    // Listen for messages where current student is stdID2
+    _unreadMessagesSubscription2 = _firestore
+        .collection('messages')
+        .where('stdID2', isEqualTo: widget.studentId)
+        .snapshots()
+        .listen((snapshot) {
+      _updateUnreadStatus(snapshot, 1);
+    });
+  }
+
+  void _updateUnreadStatus(QuerySnapshot snapshot, int index) {
+    // Store snapshot at the appropriate index
+    if (_messageSnapshots.length <= index) {
+      _messageSnapshots.addAll(List.filled(index + 1 - _messageSnapshots.length, snapshot));
+    } else {
+      _messageSnapshots[index] = snapshot;
+    }
+    
+    // Check all snapshots for unread messages
+    // Message is unread if lastSenderId is not the current user AND
+    // the lastUpdated time is after the last read time
+    bool hasUnread = false;
+    for (var snap in _messageSnapshots) {
+      for (var doc in snap.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          final lastSenderId = data['lastSenderId'] as String?;
+          if (lastSenderId != null && lastSenderId != widget.studentId) {
+            final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate();
+            final lastReadTime = (data['lastReadBy_${widget.studentId}'] as Timestamp?)?.toDate();
+            if (lastUpdated != null) {
+              if (lastReadTime == null || lastUpdated.isAfter(lastReadTime)) {
+                hasUnread = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (hasUnread) break;
+    }
+    
+    if (mounted) {
+      setState(() {
+        _hasUnreadMessages = hasUnread;
+      });
+    }
   }
 
   Future<void> _loadStudentData() async {
@@ -436,9 +510,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ),
                                   const SizedBox(height: 20),
 
-                                  // Phone Number - Full width
-                                  _InfoText(title: 'Phone Number', value: _phoneNumber ?? 'N/A'),
-                                  const SizedBox(height: 20),
+
 
                                   // Email - Full width
                                   _InfoText(title: 'Email', value: _email ?? 'N/A'),
@@ -680,6 +752,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildNavItem(BuildContext context, String imagePath, String label, int index) {
     final isSelected = _selectedIndex == index;
+    final showBadge = label == 'Message' && _hasUnreadMessages;
     
     return GestureDetector(
       onTap: () {
@@ -711,11 +784,29 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              imagePath,
-              width: 24,
-              height: 24,
-              fit: BoxFit.contain,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Image.asset(
+                  imagePath,
+                  width: 24,
+                  height: 24,
+                  fit: BoxFit.contain,
+                ),
+                if (showBadge)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 2),
             Text(
