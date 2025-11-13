@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'sreport_detail.dart';
 
 class IllegalParkingStaffPage extends StatefulWidget {
@@ -11,55 +13,35 @@ class IllegalParkingStaffPage extends StatefulWidget {
 
 class _IllegalParkingStaffPageState extends State<IllegalParkingStaffPage> {
   final TextEditingController _searchController = TextEditingController();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Sample data - replace with Firebase data later
-  final List<Map<String, dynamic>> _parkingReports = [
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-    {
-      'studentId': '2409300',
-      'description': 'There is a illegal double park which park at staff parking',
-      'time': '2mins ago',
-    },
-  ];
+  String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  // Format timestamp to relative time (e.g., "2mins ago")
+  String _formatTimeAgo(Timestamp? timestamp) {
+    if (timestamp == null) return 'Unknown';
+
+    final now = DateTime.now();
+    final reportTime = timestamp.toDate();
+    final difference = now.difference(reportTime);
+
+    if (difference.inSeconds < 60) {
+      return '${difference.inSeconds}s ago';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}min ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${reportTime.day}/${reportTime.month}/${reportTime.year}';
+    }
   }
 
   @override
@@ -107,8 +89,13 @@ class _IllegalParkingStaffPageState extends State<IllegalParkingStaffPage> {
                     ),
                     child: TextField(
                       controller: _searchController,
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value.trim().toLowerCase();
+                        });
+                      },
                       decoration: const InputDecoration(
-                        hintText: 'Search',
+                        hintText: 'Search by plate number or student ID',
                         hintStyle: TextStyle(
                           color: Colors.black38,
                           fontSize: 14,
@@ -143,7 +130,6 @@ class _IllegalParkingStaffPageState extends State<IllegalParkingStaffPage> {
                       size: 22,
                     ),
                     onPressed: () {
-                      // Show filter options
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Filter options coming soon'),
@@ -175,63 +161,288 @@ class _IllegalParkingStaffPageState extends State<IllegalParkingStaffPage> {
 
           const SizedBox(height: 12),
 
-          // Reports List
+          // Reports List from Firebase
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _parkingReports.length,
-              itemBuilder: (context, index) {
-                final report = _parkingReports[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFAFAFA),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFE0E0E0),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Student ID  ${report['studentId']}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            report['time'],
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black38,
-                            ),
-                          ),
-                        ],
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('report')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF8B4F52),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        report['description'],
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black54,
-                          height: 1.3,
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}'),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('No reports found'),
+                  );
+                }
+
+                // Get all reports
+                final reports = snapshot.data!.docs;
+
+                // Filter reports based on search query
+                final filteredReports = reports.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final plateNo = (data['carPlateNo'] ?? '').toString().toLowerCase();
+                  final reportId = (data['reportId'] ?? '').toString().toLowerCase();
+
+                  if (_searchQuery.isEmpty) {
+                    return true;
+                  }
+
+                  return plateNo.contains(_searchQuery) ||
+                      reportId.contains(_searchQuery);
+                }).toList();
+
+                if (filteredReports.isEmpty) {
+                  return const Center(
+                    child: Text('No reports match your search'),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: filteredReports.length,
+                  itemBuilder: (context, index) {
+                    final doc = filteredReports[index];
+                    final data = doc.data() as Map<String, dynamic>;
+
+                    final carPlateNo = data['carPlateNo'] ?? 'Unknown';
+                    final description = data['description'] ?? 'No description';
+                    final reportType = data['reportType'] ?? 'Report';
+                    final timestamp = data['timestamp'] as Timestamp?;
+                    final reportId = data['reportId'] ?? 'Unknown';
+
+                    return GestureDetector(
+                      onTap: () {
+                        // Navigate to report detail page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StaffReportDetailPage(
+                              reportId: reportId,
+                              reportData: data,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAFAFA),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFE0E0E0),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Plate: $carPlateNo',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        reportType,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  _formatTimeAgo(timestamp),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black38,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              description,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black54,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Staff Report Detail Screen (placeholder)
+class StaffReportDetailScreen extends StatelessWidget {
+  final String reportId;
+  final Map<String, dynamic> reportData;
+
+  const StaffReportDetailScreen({
+    Key? key,
+    required this.reportId,
+    required this.reportData,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF8B4F52),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'Report Detail',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Report ID
+            Text(
+              'Report ID: $reportId',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Car Plate Number
+            const Text(
+              'Car Plate Number',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                reportData['carPlateNo'] ?? 'Unknown',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Report Type
+            const Text(
+              'Report Type',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                reportData['reportType'] ?? 'Unknown',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Description
+            const Text(
+              'Description',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                reportData['description'] ?? 'No description',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -326,7 +326,7 @@ class _HomePageState extends State<HomePage> {
                             }else if (function['label'] == 'Pass') {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => VehicleRegistrationScreen(),
+                                MaterialPageRoute(builder: (context) => VehicleRegistrationScreen(studentId: widget.studentId),
                                 ),
                               );
                             }else if (function['label'] == 'Appeal') {

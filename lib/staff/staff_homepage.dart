@@ -23,7 +23,7 @@ class StaffHomePage extends StatefulWidget {
 
 class _StaffHomePageState extends State<StaffHomePage> {
   final List<Map<String, dynamic>> _functions = [
-    {'image': 'assets/parkingstaff_logo.png', 'label': 'Parking'},
+    {'image': 'assets/parkingstaff_logo.png', 'label': 'Report'},
     {'image': 'assets/appealstaff.png', 'label': 'Appeal'},
     {'image': 'assets/passstaff.png', 'label': 'Registration'},
     {'image': 'assets/summary.png', 'label': 'Summary'},
@@ -99,7 +99,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
                     final function = _functions[index];
                     return GestureDetector(
                       onTap: () {
-                        if (function['label'] == 'Parking') {
+                        if (function['label'] == 'Report') {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
