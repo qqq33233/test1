@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'parking_reservation.dart';
 
 class ParkingAssignment extends StatefulWidget {
@@ -693,6 +694,17 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
   }
 
   Future<void> _reserveParking() async {
+    // Check if parking is available before reserving
+    if (availableSlots == null || availableSlots == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No parking available. Cannot reserve parking.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       isReserving = true;
     });
@@ -746,11 +758,11 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
           // Save reservation to Firebase (with assigned spot number)
           await _saveReservationToFirebase();
           
-          // Navigate to confirmation page
+          // Navigate to confirmation page with student ID
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => const ParkingConfirmationPage(),
+              builder: (context) => ParkingConfirmationPage(studentId: widget.studentId),
             ),
           );
         } else {
@@ -781,17 +793,20 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
       final nextNumber = querySnapshot.docs.length + 1;
       final spotRsvtID = 'B${nextNumber.toString().padLeft(7, '0')}';
       
-      // Get current time in UTC+8
+      // Get current time and convert to UTC for storage
+      // DateTime.now() gives local time, convert to UTC for Firebase
       final now = DateTime.now();
-      final utc8Time = now.subtract(const Duration(hours: 8)); // Convert to UTC for storage
+      final utcTime = now.toUtc();
       
       // Prepare reservation data
+      // Status is 'Reserved' initially - user has 5 minutes to park
+      // Will be changed to 'UpComing' when user confirms they've parked
       final reservationData = {
         'stdID': widget.studentId,
         'spotLocation': widget.selectedArea,
         'spotRsvtID': spotRsvtID,
-        'spotRsvtStatus': 'UpComing',
-        'rsvTime': Timestamp.fromDate(utc8Time),
+        'spotRsvtStatus': 'Reserved',  // Reserved status - spot unavailable to others for 5 minutes
+        'rsvTime': Timestamp.fromDate(utcTime),
       };
       
       // Add spot number if assigned
@@ -1013,7 +1028,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
                       // Reserve Button
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: isReserving ? null : _reserveParking,
+                          onPressed: (isReserving || availableSlots == null || availableSlots == 0) ? null : _reserveParking,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF4E6691),
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1052,7 +1067,9 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
 }
 
 class ParkingConfirmationPage extends StatelessWidget {
-  const ParkingConfirmationPage({super.key});
+  final String studentId;
+  
+  const ParkingConfirmationPage({super.key, required this.studentId});
 
   @override
   Widget build(BuildContext context) {
@@ -1111,7 +1128,7 @@ class ParkingConfirmationPage extends StatelessWidget {
             
             // "Please parking within 5 minutes" text
             const Text(
-              'Please parking within 5 minutes',
+              'Please park within 5 minutes',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey,

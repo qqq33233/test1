@@ -4,11 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Helper function to convert UTC time to local timezone
+DateTime _convertToLocalTime(DateTime utcTime) {
+  // Add 8 hours to match local timezone
+  return utcTime.add(const Duration(hours: 16));
+}
+
 class ChatPage extends StatefulWidget {
   final String senderName;
   final String? currentStudentId; // Current logged-in student ID
   final String? recipientStudentId; // Student ID to chat with (from scanned car plate)
   final String profileImage;
+  final String? chatId; // Chat document ID
   
   const ChatPage({
     super.key,
@@ -16,6 +23,7 @@ class ChatPage extends StatefulWidget {
     this.currentStudentId,
     this.recipientStudentId,
     this.profileImage = 'assets/profile.png',
+    this.chatId,
   });
 
   @override
@@ -37,29 +45,50 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _initializeChat();
+    _markAsRead();
+  }
+
+  // Mark conversation as read when chat page is opened
+  Future<void> _markAsRead() async {
+    if (widget.chatId != null && widget.currentStudentId != null) {
+      try {
+        await _firestore.collection('messages').doc(widget.chatId).update({
+          'lastReadBy_${widget.currentStudentId}': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        print('[Chat] Error marking conversation as read: $e');
+      }
+    }
   }
 
   void _initializeChat() {
-    // For student-to-student chat, we need both current and recipient student IDs
-    if (widget.currentStudentId == null && widget.recipientStudentId == null) {
-      print('[Chat] Error: Both currentStudentId and recipientStudentId are null');
-      return;
-    }
-
-    // If currentStudentId is null, it means we're coming from car plate scanner (no logged-in student)
-    // In this case, we'll use recipientStudentId as the chat identifier
-    // If currentStudentId exists, it's a logged-in student chatting with another student
-    if (widget.currentStudentId != null && widget.recipientStudentId != null) {
-      // Both IDs exist - create a consistent chat ID (sorted to ensure same chat for both students)
-      final ids = [widget.currentStudentId!, widget.recipientStudentId!]..sort();
-      _chatId = '${ids[0]}_${ids[1]}';
+    // Use provided chatId if available, otherwise generate it
+    if (widget.chatId != null) {
+      _chatId = widget.chatId;
       _currentUserId = widget.currentStudentId;
       _recipientId = widget.recipientStudentId;
-    } else if (widget.recipientStudentId != null) {
-      // Only recipient ID (from car plate scanner) - use it as chat identifier
-      _chatId = 'student_${widget.recipientStudentId}';
-      _currentUserId = null; // No current user (view-only from scanner)
-      _recipientId = widget.recipientStudentId;
+    } else {
+      // For student-to-student chat, we need both current and recipient student IDs
+      if (widget.currentStudentId == null && widget.recipientStudentId == null) {
+        print('[Chat] Error: Both currentStudentId and recipientStudentId are null');
+        return;
+      }
+
+      // If currentStudentId is null, it means we're coming from car plate scanner (no logged-in student)
+      // In this case, we'll use recipientStudentId as the chat identifier
+      // If currentStudentId exists, it's a logged-in student chatting with another student
+      if (widget.currentStudentId != null && widget.recipientStudentId != null) {
+        // Both IDs exist - create a consistent chat ID (sorted to ensure same chat for both students)
+        final ids = [widget.currentStudentId!, widget.recipientStudentId!]..sort();
+        _chatId = '${ids[0]}_${ids[1]}';
+        _currentUserId = widget.currentStudentId;
+        _recipientId = widget.recipientStudentId;
+      } else if (widget.recipientStudentId != null) {
+        // Only recipient ID (from car plate scanner) - use it as chat identifier
+        _chatId = 'student_${widget.recipientStudentId}';
+        _currentUserId = null; // No current user (view-only from scanner)
+        _recipientId = widget.recipientStudentId;
+      }
     }
     
     // Load messages from Firebase
@@ -87,10 +116,11 @@ class _ChatPageState extends State<ChatPage> {
             // Debug logging
             print('[Chat] Message - senderID: $senderID, currentUserId: $_currentUserId, isSent: $isSent');
             
+            final timestampUtc = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
             return ChatMessage(
               text: data['text'] as String? ?? '',
               isSent: isSent,
-              time: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              time: _convertToLocalTime(timestampUtc),
             );
           }).toList();
         });
@@ -356,7 +386,11 @@ class _ChatPageState extends State<ChatPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: message.isSent ? Colors.white : const Color(0xFFEEF6FF),
+                border: message.isSent ? Border.all(
+                  color: const Color(0xFFE8E9EB),
+                  width: 1,
+                ) : null,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
