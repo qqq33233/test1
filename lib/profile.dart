@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,7 +13,7 @@ import 'carPlate_scanner.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? studentId;
-  
+
   const ProfilePage({super.key, this.studentId});
 
   @override
@@ -22,17 +23,16 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   int _selectedIndex = 4; // Profile is selected
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   String? _studentName;
   String? _studentId;
-  String? _phoneNumber;
   String? _email;
   String? _vehiclePassStatus;
   String? _vehiclePassDuration;
   String? _vehiclePassDate;
   bool _isLoading = true;
   File? _profileImage; // Selected profile image
-  String? _profileImageUrl; // Profile image URL from Firebase Storage
+  String? _profileImageUrl; // Profile image URL/Base64 from Firestore
   final ImagePicker _imagePicker = ImagePicker();
   final FirebaseStorage _storage = FirebaseStorage.instance;
   bool _hasUnreadMessages = false;
@@ -83,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } else {
       _messageSnapshots[index] = snapshot;
     }
-    
+
     // Check all snapshots for unread messages
     // Message is unread if lastSenderId is not the current user AND
     // the lastUpdated time is after the last read time
@@ -107,7 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
       }
       if (hasUnread) break;
     }
-    
+
     if (mounted) {
       setState(() {
         _hasUnreadMessages = hasUnread;
@@ -137,8 +137,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _studentName = studentData['stdName'] as String? ?? 'N/A';
           _studentId = studentData['stdID'] as String? ?? widget.studentId;
           _email = studentData['stdEmail'] as String? ?? 'N/A';
-          _phoneNumber = studentData['phoneNumber'] as String? ?? '018-3333333'; // Default if not in DB
-          _profileImageUrl = studentData['profileImageUrl'] as String?; // Load profile image URL
+          _profileImageUrl = studentData['profileImageUrl'] as String?; // Load profile image URL or base64
         });
       }
 
@@ -196,18 +195,27 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _formatDate(DateTime date) {
     const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+      'July', 'August', 'September', 'October', 'November', 'December'];
     return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
   }
 
   ImageProvider _getProfileImage() {
-    // Priority: 1. Selected image (local), 2. Firebase Storage URL, 3. Default asset
     if (_profileImage != null) {
       return FileImage(_profileImage!);
     } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-      return NetworkImage(_profileImageUrl!);
+      if (_profileImageUrl!.startsWith('http')) {
+        return NetworkImage(_profileImageUrl!);
+      } else {
+        try {
+          final decodedBytes = base64Decode(_profileImageUrl!);
+          return MemoryImage(decodedBytes);
+        } catch (e) {
+          print('Error decoding base64: $e');
+          return const AssetImage('assets/profile_logo.png');
+        }
+      }
     } else {
-      return const AssetImage('assets/profile.png');
+      return const AssetImage('assets/profile_logo.png');
     }
   }
 
@@ -246,28 +254,9 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
 
-      // Create a reference to the location you want to upload to in Firebase Storage
-      final String fileName = 'profile_${widget.studentId}.jpg';
-      final Reference ref = _storage.ref().child('profile_images').child(fileName);
+      final bytes = await imageFile.readAsBytes();
+      final base64String = base64Encode(bytes);
 
-      // Upload the file to Firebase Storage
-      final UploadTask uploadTask = ref.putFile(
-        imageFile,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'studentId': widget.studentId!,
-          },
-        ),
-      );
-
-      // Wait for upload to complete
-      final TaskSnapshot snapshot = await uploadTask;
-      
-      // Get download URL
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
-
-      // Update student document in Firestore with the image URL
       final studentQuery = await _firestore
           .collection('student')
           .where('stdID', isEqualTo: widget.studentId)
@@ -276,12 +265,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (studentQuery.docs.isNotEmpty) {
         await studentQuery.docs.first.reference.update({
-          'profileImageUrl': downloadUrl,
+          'profileImageUrl': base64String,
         });
 
-        // Update local state
         setState(() {
-          _profileImageUrl = downloadUrl;
+          _profileImageUrl = base64String;
         });
 
         if (mounted) {
@@ -314,7 +302,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _pickProfileImage() async {
     try {
-      // Show options: Camera or Gallery
       final ImageSource? source = await showModalBottomSheet<ImageSource>(
         context: context,
         builder: (BuildContext context) {
@@ -344,7 +331,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (source == null) return;
 
-      // Pick image
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         maxWidth: 800,
@@ -357,7 +343,6 @@ class _ProfilePageState extends State<ProfilePage> {
           _profileImage = File(pickedFile.path);
         });
 
-        // Upload image to Firebase Storage
         await _uploadProfileImage(File(pickedFile.path));
       }
     } catch (e) {
@@ -395,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const StutLogin()),
-                  (route) => false,
+                      (route) => false,
                 );
               },
               child: const Text(
@@ -411,7 +396,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Set system status bar to blue with white content
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Color(0xFF4E6691),
@@ -455,222 +439,220 @@ class _ProfilePageState extends State<ProfilePage> {
           Expanded(
             child: _isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF4E6691),
-                    ),
-                  )
+              child: CircularProgressIndicator(
+                color: Color(0xFF4E6691),
+              ),
+            )
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
 
-                        // Stack to overlap profile photo with card
-                        Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.topCenter,
-                          children: [
-                            // Student Details Card
-                            Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.only(top: 50), // Push card down so top edge is at middle of photo
-                              padding: const EdgeInsets.only(
-                                top: 64, // Space for overlapping photo (50 radius + 14 padding)
-                                left: 24,
-                                right: 24,
-                                bottom: 24,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.grey.withOpacity(0.1),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Full Name and Student ID - Side by side
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: _InfoText(title: 'Full Name', value: _studentName ?? 'N/A'),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: _InfoText(title: 'Student ID', value: _studentId ?? widget.studentId ?? 'N/A', alignRight: true),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 20),
-
-
-
-                                  // Email - Full width
-                                  _InfoText(title: 'Email', value: _email ?? 'N/A'),
-                                ],
-                              ),
+                  // Stack to overlap profile photo with card
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.topCenter,
+                    children: [
+                      // Student Details Card
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 50), // Push card down so top edge is at middle of photo
+                        padding: const EdgeInsets.only(
+                          top: 64, // Space for overlapping photo (50 radius + 14 padding)
+                          left: 24,
+                          right: 24,
+                          bottom: 24,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
-                            
-                            // Profile Image with Camera Button - Positioned to overlap card
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Full Name and Student ID - Side by side
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: _InfoText(title: 'Full Name', value: _studentName ?? 'N/A'),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _InfoText(title: 'Student ID', value: _studentId ?? widget.studentId ?? 'N/A', alignRight: true),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Email - Full width
+                            _InfoText(title: 'Email', value: _email ?? 'N/A'),
+                          ],
+                        ),
+                      ),
+
+                      // Profile Image with Camera Button - Positioned to overlap card
+                      Positioned(
+                        top: 0, // Position at top of stack
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Profile Photo
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Colors.grey[300],
+                              backgroundImage: _getProfileImage(),
+                              onBackgroundImageError: (exception, stackTrace) {
+                                // Fallback if image doesn't load
+                              },
+                            ),
+                            // Camera Button - Positioned at bottom-right
                             Positioned(
-                              top: 0, // Position at top of stack
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  // Profile Photo
-                                  CircleAvatar(
-                                    radius: 50,
-                                    backgroundColor: Colors.grey[300],
-                                    backgroundImage: _getProfileImage(),
-                                    onBackgroundImageError: (exception, stackTrace) {
-                                      // Fallback if image doesn't load
-                                    },
-                                  ),
-                                  // Camera Button - Positioned at bottom-right
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: GestureDetector(
-                                      onTap: _pickProfileImage,
-                                      child: Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF4E6691), // Dark blue
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.camera_alt,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                      ),
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: _pickProfileImage,
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4E6691), // Dark blue
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
                                     ),
                                   ),
-                                ],
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
+                      ),
+                    ],
+                  ),
 
-                        const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-                        // Vehicle Pass Card
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.1),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Vehicle Pass',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Divider(thickness: 1, color: Colors.grey, height: 20),
-                              const SizedBox(height: 16),
-                              
-                              // Status and Duration - Side by side
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: _InfoText(title: 'Status', value: _vehiclePassStatus ?? 'Active'),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: _InfoText(title: 'Duration', value: _vehiclePassDuration ?? '3 months', alignRight: true),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-
-                              // Date - Full width
-                              _InfoText(
-                                title: 'Date',
-                                value: _vehiclePassDate ?? '02 July 2025 - 21 October 2025',
-                              ),
-                            ],
+                  // Vehicle Pass Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Vehicle Pass',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        const Divider(thickness: 1, color: Colors.grey, height: 20),
+                        const SizedBox(height: 16),
 
-                        const SizedBox(height: 24),
+                        // Status and Duration - Side by side
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: _InfoText(title: 'Status', value: _vehiclePassStatus ?? 'Active'),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _InfoText(title: 'Duration', value: _vehiclePassDuration ?? '3 months', alignRight: true),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
 
-                        // Logout Button
-                        Center(
-                          child: Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                onTap: _handleLogout,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.logout,
-                                        color: Colors.red[600],
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Logout',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.red[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                        // Date - Full width
+                        _InfoText(
+                          title: 'Date',
+                          value: _vehiclePassDate ?? '02 July 2025 - 21 October 2025',
                         ),
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 24),
+
+                  // Logout Button
+                  Center(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: _handleLogout,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.logout,
+                                  color: Colors.red[600],
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Logout',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -679,8 +661,8 @@ class _ProfilePageState extends State<ProfilePage> {
         decoration: const BoxDecoration(
           color: Color(0xFF4E6691),
           borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+            topLeft: Radius.circular(0),
+            topRight: Radius.circular(0),
           ),
         ),
         child: SafeArea(
@@ -753,13 +735,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildNavItem(BuildContext context, String imagePath, String label, int index) {
     final isSelected = _selectedIndex == index;
     final showBadge = label == 'Message' && _hasUnreadMessages;
-    
+
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedIndex = index;
         });
-        
+
         // Navigate based on selection
         if (label == 'Home') {
           Navigator.pushReplacement(
