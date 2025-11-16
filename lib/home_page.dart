@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp/report.dart';
 import 'appeal_pass.dart';
+import 'notification.dart';
 import 'parking_assignment.dart';
 import 'parking_status.dart';
 import 'realtimemap.dart';
@@ -16,7 +17,7 @@ import 'carPlate_scanner.dart';
 
 class HomePage extends StatefulWidget {
   final String studentId;
-  
+
   const HomePage({super.key, required this.studentId});
 
   @override
@@ -28,21 +29,25 @@ class _HomePageState extends State<HomePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _studentName = 'Student Name';
   bool _hasUnreadMessages = false;
+  bool _hasUnreadNotifications = false;
   StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription1;
   StreamSubscription<QuerySnapshot>? _unreadMessagesSubscription2;
+  StreamSubscription<QuerySnapshot>? _unreadNotificationsSubscription;
   List<QuerySnapshot> _messageSnapshots = [];
-  
+
   @override
   void initState() {
     super.initState();
     _loadStudentName();
     _checkUnreadMessages();
+    _checkUnreadNotifications();
   }
 
   @override
   void dispose() {
     _unreadMessagesSubscription1?.cancel();
     _unreadMessagesSubscription2?.cancel();
+    _unreadNotificationsSubscription?.cancel();
     super.dispose();
   }
 
@@ -68,6 +73,23 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _checkUnreadNotifications() {
+    if (widget.studentId == null) return;
+
+    _unreadNotificationsSubscription = _firestore
+        .collection('notification')
+        .where('stdID', isEqualTo: widget.studentId)
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifications = snapshot.docs.isNotEmpty;
+        });
+      }
+    });
+  }
+
   void _updateUnreadStatus(QuerySnapshot snapshot, int index) {
     // Store snapshot at the appropriate index
     if (_messageSnapshots.length <= index) {
@@ -75,7 +97,7 @@ class _HomePageState extends State<HomePage> {
     } else {
       _messageSnapshots[index] = snapshot;
     }
-    
+
     // Check all snapshots for unread messages
     // Message is unread if lastSenderId is not the current user AND
     // the lastUpdated time is after the last read time
@@ -99,7 +121,7 @@ class _HomePageState extends State<HomePage> {
       }
       if (hasUnread) break;
     }
-    
+
     if (mounted) {
       setState(() {
         _hasUnreadMessages = hasUnread;
@@ -150,7 +172,7 @@ class _HomePageState extends State<HomePage> {
         statusBarBrightness: Brightness.dark,
       ),
     );
-    
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -198,185 +220,185 @@ class _HomePageState extends State<HomePage> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Dashboard Section
-                    const Text(
-                      'Dashboard',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Dashboard Section
+                  const Text(
+                    'Dashboard',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
                     ),
-                    const SizedBox(height: 16),
-                    
-                    // Dashboard Card
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
-                      ),
-                      child: Stack(
-                        children: [
-                          // Background image
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              'assets/dashboard_1.png',
-                              width: double.infinity,
-                              height: 200,
-                              fit: BoxFit.cover,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Dashboard Card
+                  Container(
+                    width: double.infinity,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Background image
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/dashboard_1.png',
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        // Text overlay
+                        const Positioned(
+                          top: 16,
+                          left: 16,
+                          child: Text(
+                            'LPR REGISTRATION\nNow AVAILABLE VIA INTRANET !!',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
-                          // Text overlay
-                          const Positioned(
-                            top: 16,
-                            left: 16,
-                            child: Text(
-                              'LPR REGISTRATION\nNow AVAILABLE VIA INTRANET !!',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Functions Section
+                  const Text(
+                    'Functions',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Functions Grid
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1,
+                    ),
+                    itemCount: _functions.length,
+                    itemBuilder: (context, index) {
+                      final function = _functions[index];
+                      return GestureDetector(
+                        onTap: () {
+                          // Handle function tap
+                          if (function['label'] == 'Parking') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ParkingAssignment(studentId: widget.studentId),
                               ),
-                            ),
+                            );
+                          } else if (function['label'] == 'Status') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ParkingStatus(studentId: widget.studentId),
+                              ),
+                            );
+                          } else if (function['label'] == 'Visitor') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => VisitorPage(studentId: widget.studentId),
+                              ),
+                            );
+                          }else if (function['label'] == 'Profile') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ProfilePage(studentId: widget.studentId)),
+                            );
+                          }else if (function['label'] == 'Report') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ReportScreen(),
+                              ),
+                            );
+                          } else if (function['label'] == 'Locator') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const LocatorPage(),
+                              ),
+                            );
+                          }else if (function['label'] == 'Traffic') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => RealTimeTrafficScreen(),
+                              ),
+                            );
+                          }else if (function['label'] == 'Pass') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => VehicleRegistrationScreen(studentId: widget.studentId),
+                              ),
+                            );
+                          }else if (function['label'] == 'Appeal') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => VehicleAppealScreen(studentId: widget.studentId),
+                              ),
+                            );
+                          }
+                          else {
+                            print('Tapped ${function['label']}');
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9F4FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // Functions Section
-                    const Text(
-                      'Functions',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Functions Grid
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 1,
-                      ),
-                      itemCount: _functions.length,
-                      itemBuilder: (context, index) {
-                        final function = _functions[index];
-                        return GestureDetector(
-                          onTap: () {
-                            // Handle function tap
-                            if (function['label'] == 'Parking') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ParkingAssignment(studentId: widget.studentId),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.asset(
+                                function['image'],
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.contain,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                function['label'],
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
                                 ),
-                              );
-                            } else if (function['label'] == 'Status') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ParkingStatus(studentId: widget.studentId),
-                                ),
-                              );
-                            } else if (function['label'] == 'Visitor') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => VisitorPage(studentId: widget.studentId),
-                                ),
-                              );
-                            }else if (function['label'] == 'Profile') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => ProfilePage(studentId: widget.studentId)),
-                              );
-                            }else if (function['label'] == 'Report') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => ReportScreen(),
-                                ),
-                              );
-                            } else if (function['label'] == 'Locator') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const LocatorPage(),
-                                ),
-                              );
-                            }else if (function['label'] == 'Traffic') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => RealTimeTrafficScreen(),
-                                ),
-                              );
-                            }else if (function['label'] == 'Pass') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => VehicleRegistrationScreen(studentId: widget.studentId),
-                                ),
-                              );
-                            }else if (function['label'] == 'Appeal') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => VehicleAppealScreen(),
-                                ),
-                              );
-                            }
-                             else {
-                              print('Tapped ${function['label']}');
-                            }
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE9F4FF),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  function['image'],
-                                  width: 50,
-                                  height: 50,
-                                  fit: BoxFit.contain,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  function['label'],
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
       // Bottom Navigation Bar
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -450,14 +472,15 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildNavItem(String imagePath, String label, int index) {
     final isSelected = _selectedIndex == index;
-    final showBadge = label == 'Message' && _hasUnreadMessages;
-    
+    final showMessageBadge = label == 'Message' && _hasUnreadMessages;
+    final showNotificationBadge = label == 'Notification' && _hasUnreadNotifications;
+
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedIndex = index;
         });
-        
+
         // Navigate based on selection
         if (label == 'Profile') {
           Navigator.push(
@@ -471,6 +494,13 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(
               builder: (context) => MessagePage(studentId: widget.studentId),
+            ),
+          );
+        } else if (label == 'Notification') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NotificationPage(studentId: widget.studentId),
             ),
           );
         }
@@ -489,7 +519,7 @@ class _HomePageState extends State<HomePage> {
                   height: 24,
                   fit: BoxFit.contain,
                 ),
-                if (showBadge)
+                if (showMessageBadge || showNotificationBadge)
                   Positioned(
                     top: -4,
                     right: -4,

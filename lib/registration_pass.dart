@@ -29,16 +29,38 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
   String _studentId = '';
   bool _isLoading = true;
   bool _hasAlreadyRegistered = false;
+  bool _isRegistrationOpen = false;
 
 
   @override
   void initState() {
     super.initState();
     _loadStudentData();
+    _checkRegistrationStatus();  // Add this
     _selectedDate = DateTime.now().add(const Duration(days: 90));
     _dateController.text = _formatDate(_selectedDate!);
   }
 
+  Future<void> _checkRegistrationStatus() async {
+    try {
+      final doc = await _firestore
+          .collection('setting')
+          .doc('vehiclePassRegistration')
+          .get();
+
+      if (doc.exists) {
+        setState(() {
+          _isRegistrationOpen = doc.data()?['isOpen'] ?? false;
+        });
+
+        print('Registration status: $_isRegistrationOpen');
+      } else {
+        print('Document not found in setting collection');
+      }
+    } catch (e) {
+      print('Error checking registration status: $e');
+    }
+  }
 
   Future<void> _loadStudentData() async {
     try {
@@ -287,6 +309,57 @@ class _VehicleRegistrationScreenState extends State<VehicleRegistrationScreen> {
           ? const Center(
         child: CircularProgressIndicator(
           valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4E6691)),
+        ),
+      )
+          : !_isRegistrationOpen  // ADD THIS CHECK
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.lock,
+                    color: Colors.white,
+                    size: 60,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'Registration Closed',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Vehicle pass registration is currently closed. Please check back later.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
       )
           : _hasAlreadyRegistered
@@ -615,10 +688,8 @@ class RegistrationConfirmedScreen extends StatelessWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () {
-            // Pop twice: once for confirmation screen, once for vehicle registration screen
-            // This returns to the home page
-            Navigator.of(context).pop(); // Close confirmation screen
-            Navigator.of(context).pop(); // Close vehicle registration screen
+            Navigator.of(context).pop();
+            Navigator.of(context).pop();
           },
         ),
         title: const Text(

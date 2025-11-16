@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'staff_profile.dart';
 import 'staff_report.dart';
 import 'staff_vehicle_re.dart';
 import 'summary.dart';
@@ -27,6 +28,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
     {'image': 'assets/appealstaff.png', 'label': 'Appeal'},
     {'image': 'assets/passstaff.png', 'label': 'Registration'},
     {'image': 'assets/summary.png', 'label': 'Summary'},
+    {'image': 'assets/profile_logo.png', 'label': 'Profile'},
   ];
 
   @override
@@ -117,10 +119,19 @@ class _StaffHomePageState extends State<StaffHomePage> {
                             context,
                             MaterialPageRoute(builder: (context) => VehiclePassStaffPage(),
                             ),
-                          );}else if (function['label'] == 'Summary') {
+                          );
+                        }else if (function['label'] == 'Summary') {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => SummaryStaffPage(),
+                            MaterialPageRoute(
+                              builder: (context) => SummaryStaffPage(),
+                            ),
+                          );
+                        }else if (function['label'] == 'Profile') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StaffProfilePage(staffId: widget.staffId),
                             ),
                           );
                         } else {
