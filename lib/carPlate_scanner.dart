@@ -563,34 +563,6 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
                 ),
               ),
             ),
-
-            const SizedBox(height: 24),
-            
-            // Info message
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: Color(0xFF4E6691), size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Please scan car plate from backend console. Results will appear here automatically.',
-                      style: TextStyle(
-                        color: Color(0xFF4E6691),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
