@@ -24,12 +24,112 @@ class _VisitorUpcomingPageState extends State<VisitorUpcomingPage> {
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
+  void _showDeleteConfirmDialog(String date, String visitorName, String docId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          titlePadding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 16),
+          title: const Text(
+            'Delete Reservation',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to delete the reservation for $visitorName on $date?',
+            style: const TextStyle(
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          actionsPadding: EdgeInsets.zero,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Yes button (confirms deletion)
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          await _deleteVisitor(context, docId);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xAEBFCF).withOpacity(0.08),
+                          foregroundColor: const Color(0xFF4E6691),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Yes',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // No button (cancels deletion)
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4E6691),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'No',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _deleteVisitor(BuildContext context, String docId) async {
     try {
       await _firestore.collection('visitorReservation').doc(docId).delete();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Visitor deleted successfully')),
+          const SnackBar(
+            content: Text('Visitor deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
         );
         // Refresh after deletion
         _refreshData();
@@ -37,7 +137,10 @@ class _VisitorUpcomingPageState extends State<VisitorUpcomingPage> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting visitor: $e')),
+          SnackBar(
+            content: Text('Error deleting visitor: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -412,7 +515,9 @@ class _VisitorUpcomingPageState extends State<VisitorUpcomingPage> {
         // Delete Icon (outside the card)
         const SizedBox(width: 12),
         GestureDetector(
-          onTap: () => _deleteVisitor(context, doc.id),
+          onTap: () {
+            _showDeleteConfirmDialog(dateText, visitorName, doc.id);
+          },
           child: Container(
             width: 38,
             height: 38,
