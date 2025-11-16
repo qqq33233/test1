@@ -30,9 +30,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _vehiclePassStatus;
   String? _vehiclePassDuration;
   String? _vehiclePassDate;
+  bool _hasVehiclePass = false;
   bool _isLoading = true;
-  File? _profileImage; // Selected profile image
-  String? _profileImageUrl; // Profile image URL/Base64 from Firestore
+  File? _profileImage;
+  String? _profileImageUrl;
   final ImagePicker _imagePicker = ImagePicker();
   final FirebaseStorage _storage = FirebaseStorage.instance;
   bool _hasUnreadMessages = false;
@@ -57,7 +58,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void _checkUnreadMessages() {
     if (widget.studentId == null) return;
 
-    // Listen for messages where current student is stdID1
     _unreadMessagesSubscription1 = _firestore
         .collection('messages')
         .where('stdID1', isEqualTo: widget.studentId)
@@ -66,7 +66,6 @@ class _ProfilePageState extends State<ProfilePage> {
       _updateUnreadStatus(snapshot, 0);
     });
 
-    // Listen for messages where current student is stdID2
     _unreadMessagesSubscription2 = _firestore
         .collection('messages')
         .where('stdID2', isEqualTo: widget.studentId)
@@ -77,16 +76,12 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _updateUnreadStatus(QuerySnapshot snapshot, int index) {
-    // Store snapshot at the appropriate index
     if (_messageSnapshots.length <= index) {
       _messageSnapshots.addAll(List.filled(index + 1 - _messageSnapshots.length, snapshot));
     } else {
       _messageSnapshots[index] = snapshot;
     }
 
-    // Check all snapshots for unread messages
-    // Message is unread if lastSenderId is not the current user AND
-    // the lastUpdated time is after the last read time
     bool hasUnread = false;
     for (var snap in _messageSnapshots) {
       for (var doc in snap.docs) {
@@ -124,7 +119,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     try {
-      // Load student data from Firestore
       final studentQuery = await _firestore
           .collection('student')
           .where('stdID', isEqualTo: widget.studentId)
@@ -137,58 +131,59 @@ class _ProfilePageState extends State<ProfilePage> {
           _studentName = studentData['stdName'] as String? ?? 'N/A';
           _studentId = studentData['stdID'] as String? ?? widget.studentId;
           _email = studentData['stdEmail'] as String? ?? 'N/A';
-          _profileImageUrl = studentData['profileImageUrl'] as String?; // Load profile image URL or base64
+          _profileImageUrl = studentData['profileImageUrl'] as String?;
         });
       }
 
-      // Load vehicle pass data from studentVehicle collection
-      try {
-        final vehicleQuery = await _firestore
-            .collection('studentVehicle')
-            .where('stdID', isEqualTo: widget.studentId)
-            .limit(1)
-            .get();
-
-        if (vehicleQuery.docs.isNotEmpty) {
-          final vehicleData = vehicleQuery.docs.first.data();
-          setState(() {
-            _vehiclePassStatus = vehicleData['vPassStatus'] as String? ?? 'Active';
-            // Calculate duration if start and end dates exist
-            final startDate = vehicleData['vPassStartDate'] as Timestamp?;
-            final endDate = vehicleData['vPassEndDate'] as Timestamp?;
-            if (startDate != null && endDate != null) {
-              final start = startDate.toDate();
-              final end = endDate.toDate();
-              final months = ((end.difference(start).inDays) / 30).round();
-              _vehiclePassDuration = '$months months';
-              _vehiclePassDate = '${_formatDate(start)} - ${_formatDate(end)}';
-            } else {
-              _vehiclePassDuration = '3 months';
-              _vehiclePassDate = '02 July 2025 - 21 October 2025';
-            }
-          });
-        } else {
-          // Default values if no vehicle pass found
-          setState(() {
-            _vehiclePassStatus = 'Active';
-            _vehiclePassDuration = '3 months';
-            _vehiclePassDate = '02 July 2025 - 21 October 2025';
-          });
-        }
-      } catch (e) {
-        print('Error loading vehicle pass: $e');
-        // Default values on error
-        setState(() {
-          _vehiclePassStatus = 'Active';
-          _vehiclePassDuration = '3 months';
-          _vehiclePassDate = '02 July 2025 - 21 October 2025';
-        });
-      }
+      await _loadVehiclePassStatus();
     } catch (e) {
       print('Error loading student data: $e');
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadVehiclePassStatus() async {
+    try {
+      final doc = await _firestore
+          .collection('vehiclePassStatus')
+          .doc(widget.studentId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data();
+        final expiryDateStr = data?['expiryDate'] as String?;
+        final issueDateStr = data?['issueDate'] as String?;
+
+        if (expiryDateStr != null && issueDateStr != null) {
+          final expiryDate = DateTime.parse(expiryDateStr);
+          final issueDate = DateTime.parse(issueDateStr);
+          final isValid = expiryDate.isAfter(DateTime.now());
+
+          if (isValid) {
+            setState(() {
+              _hasVehiclePass = true;
+              _vehiclePassStatus = data?['status'] ?? 'Active';
+              _vehiclePassDuration = data?['duration'] ?? '12 months';
+              _vehiclePassDate = '${_formatDate(issueDate)} - ${_formatDate(expiryDate)}';
+            });
+            return;
+          }
+        }
+      }
+
+      setState(() {
+        _hasVehiclePass = false;
+        _vehiclePassStatus = null;
+        _vehiclePassDuration = null;
+        _vehiclePassDate = null;
+      });
+    } catch (e) {
+      print('Error loading vehicle pass status: $e');
+      setState(() {
+        _hasVehiclePass = false;
       });
     }
   }
@@ -231,7 +226,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     try {
-      // Show loading indicator
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -376,7 +370,6 @@ class _ProfilePageState extends State<ProfilePage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Navigate to login page and clear navigation stack
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const StutLogin()),
@@ -405,7 +398,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.grey[200], // Light gray background
+      backgroundColor: Colors.grey[200],
       body: Column(
         children: [
           // Header
@@ -458,9 +451,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       // Student Details Card
                       Container(
                         width: double.infinity,
-                        margin: const EdgeInsets.only(top: 50), // Push card down so top edge is at middle of photo
+                        margin: const EdgeInsets.only(top: 50),
                         padding: const EdgeInsets.only(
-                          top: 64, // Space for overlapping photo (50 radius + 14 padding)
+                          top: 64,
                           left: 24,
                           right: 24,
                           bottom: 24,
@@ -479,7 +472,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Full Name and Student ID - Side by side
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -493,29 +485,23 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             ),
                             const SizedBox(height: 20),
-
-                            // Email - Full width
                             _InfoText(title: 'Email', value: _email ?? 'N/A'),
                           ],
                         ),
                       ),
 
-                      // Profile Image with Camera Button - Positioned to overlap card
+                      // Profile Image with Camera Button
                       Positioned(
-                        top: 0, // Position at top of stack
+                        top: 0,
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            // Profile Photo
                             CircleAvatar(
                               radius: 50,
                               backgroundColor: Colors.grey[300],
                               backgroundImage: _getProfileImage(),
-                              onBackgroundImageError: (exception, stackTrace) {
-                                // Fallback if image doesn't load
-                              },
+                              onBackgroundImageError: (exception, stackTrace) {},
                             ),
-                            // Camera Button - Positioned at bottom-right
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -525,7 +511,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF4E6691), // Dark blue
+                                    color: const Color(0xFF4E6691),
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: Colors.white,
@@ -548,7 +534,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 24),
 
-                  // Vehicle Pass Card
+                  // ✅ UPDATED: Vehicle Pass Card
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -578,26 +564,58 @@ class _ProfilePageState extends State<ProfilePage> {
                         const Divider(thickness: 1, color: Colors.grey, height: 20),
                         const SizedBox(height: 16),
 
-                        // Status and Duration - Side by side
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: _InfoText(title: 'Status', value: _vehiclePassStatus ?? 'Active'),
+                        if (_hasVehiclePass) ...[
+                          // ✅ Has Vehicle Pass - Show details
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: _InfoText(
+                                  title: 'Status',
+                                  value: _vehiclePassStatus ?? 'Active',
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _InfoText(
+                                  title: 'Duration',
+                                  value: _vehiclePassDuration ?? '12 months',
+                                  alignRight: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          _InfoText(
+                            title: 'Valid Period',
+                            value: _vehiclePassDate ?? 'N/A',
+                          ),
+                        ] else ...[
+                          // ✅ No Vehicle Pass - Show message
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.car_rental_outlined,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'You do not have a vehicle pass',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _InfoText(title: 'Duration', value: _vehiclePassDuration ?? '3 months', alignRight: true),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Date - Full width
-                        _InfoText(
-                          title: 'Date',
-                          value: _vehiclePassDate ?? '02 July 2025 - 21 October 2025',
-                        ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -673,7 +691,7 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildNavItem(context, 'assets/home_logo.png', 'Home', 0),
                 _buildNavItem(context, 'assets/message_logo.png', 'Message', 1),
-                const SizedBox(width: 40), // Space for center button
+                const SizedBox(width: 40),
                 _buildNavItem(context, 'assets/notification_logo.png', 'Notification', 3),
                 _buildNavItem(context, 'assets/profile_logo.png', 'Profile', 4),
               ],
@@ -681,9 +699,8 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ),
-      // Floating Scan Button
       floatingActionButton: Transform.translate(
-        offset: const Offset(0, 12), // Move button down (positive Y = down)
+        offset: const Offset(0, 12),
         child: Container(
           width: 80,
           height: 80,
@@ -696,7 +713,6 @@ class _ProfilePageState extends State<ProfilePage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(40),
               onTap: () {
-                // Navigate to car plate scanner page
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -742,7 +758,6 @@ class _ProfilePageState extends State<ProfilePage> {
           _selectedIndex = index;
         });
 
-        // Navigate based on selection
         if (label == 'Home') {
           Navigator.pushReplacement(
             context,
@@ -757,8 +772,6 @@ class _ProfilePageState extends State<ProfilePage> {
               builder: (context) => MessagePage(studentId: widget.studentId),
             ),
           );
-        } else if (label == 'Profile') {
-          // Already on profile page
         }
       },
       child: Container(
@@ -811,7 +824,7 @@ class _InfoText extends StatelessWidget {
   final String value;
   final bool alignRight;
 
-  _InfoText({
+  const _InfoText({
     required this.title,
     required this.value,
     this.alignRight = false,
