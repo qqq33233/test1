@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'staff_profile.dart';
 import 'staff_report.dart';
+import 'staff_vehicle_appeal.dart';
 import 'staff_vehicle_re.dart';
 import 'summary.dart';
 
@@ -117,7 +118,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
                         }else if (function['label'] == 'Appeal') {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => VehiclePassStaffPage(),
+                            MaterialPageRoute(builder: (context) => VehicleAppealStaffPage(),
                             ),
                           );
                         }else if (function['label'] == 'Summary') {
