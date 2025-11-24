@@ -27,6 +27,7 @@ class _StaffReportDetailPageState extends State<StaffReportDetailPage> {
 
     try {
       String carPlateNo = widget.reportData['carPlateNo'] ?? '';
+      String reportType = widget.reportData['reportType'] ?? 'Unknown';
 
       if (carPlateNo.isEmpty) {
         _showErrorDialog(
@@ -55,20 +56,44 @@ class _StaffReportDetailPageState extends State<StaffReportDetailPage> {
 
         print('Car found! Student ID: $studentID');
 
-        // Save message to notification or message collection
+        // Determine message based on report type
+        String notificationMessage = '';
+        String notificationTitle = '';
+        String notificationType = '';
+
+        if (reportType.toLowerCase() == 'illegal parking' ||
+            reportType.toLowerCase() == 'illegal') {
+          notificationMessage = 'Your vehicle ($carPlateNo) has been reported for illegal parking. Please take necessary action.';
+          notificationTitle = 'Illegal Parking Report';
+          notificationType = 'incident';
+        } else if (reportType.toLowerCase() == 'accident') {
+          notificationMessage = 'Your vehicle ($carPlateNo) has been reported for accident. Please take necessary action.';
+          notificationTitle = 'Accident Report';
+          notificationType = 'accident';
+        } else {
+          notificationMessage = 'Your vehicle ($carPlateNo) has been reported. Please take necessary action.';
+          notificationTitle = 'Report Notification';
+          notificationType = 'report';
+        }
+
+        // Save message to notification collection
         if (studentID.isNotEmpty) {
-          await _firestore.collection('message').add({
+          await _firestore.collection('notification').add({
+            'stdID': studentID,
             'studentID': studentID,
             'reportID': widget.reportId,
             'carPlateNo': carPlateNo,
-            'message':
-            'Your vehicle ($carPlateNo) has been reported for illegal parking. Please take necessary action.',
+            'title': notificationTitle,
+            'message': notificationMessage,
+            'type': notificationType,
+            'status': 'In Progress',
             'reportDetails': widget.reportData,
-            'timestamp': FieldValue.serverTimestamp(),
+            'photoUrl': widget.reportData['evidence'],
+            'createdAt': FieldValue.serverTimestamp(),
             'read': false,
           });
 
-          print('Message saved successfully');
+          print('Notification sent successfully.');
           _showSuccessDialog(context);
         } else {
           _showErrorDialog(
@@ -79,7 +104,7 @@ class _StaffReportDetailPageState extends State<StaffReportDetailPage> {
         }
       } else {
         // Car owner not found
-        print('Car not found in vehicle collection');
+        print('Car not found in campus system.');
         _showCarNotFoundDialog(context, carPlateNo);
       }
     } catch (e) {

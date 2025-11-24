@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SummaryStaffPage extends StatefulWidget {
   const SummaryStaffPage({Key? key}) : super(key: key);
@@ -9,10 +10,19 @@ class SummaryStaffPage extends StatefulWidget {
 }
 
 class _SummaryStaffPageState extends State<SummaryStaffPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   String _selectedMonth = 'Monthly';
   DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
   String _selectedPeriod = 'This Month';
+
+  // Current statistics
+  int _trafficIncidents = 0;
+  int _vehicleRegistrations = 0;
+  int _passAppeals = 0;
+  int _illegalParking = 0;
+  bool _isLoading = true;
 
   final List<String> _months = [
     'Monthly',
@@ -29,6 +39,87 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
     'November',
     'December',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatistics();
+  }
+
+  Future<void> _loadStatistics() async {
+    setState(() => _isLoading = true);
+
+    try {
+      print('📊 Loading statistics...');
+
+      // Load all counts
+      await Future.wait([
+        _loadTrafficIncidents(),
+        _loadVehicleRegistrations(),
+        _loadPassAppeals(),
+        _loadIllegalParking(),
+      ]);
+
+      print('✅ Statistics loaded');
+      print('Traffic Incidents: $_trafficIncidents');
+      print('Vehicle Registrations: $_vehicleRegistrations');
+      print('Pass Appeals: $_passAppeals');
+      print('Illegal Parking: $_illegalParking');
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      print('❌ Error loading statistics: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadTrafficIncidents() async {
+    try {
+      final snapshot = await _firestore
+          .collection('report')
+          .where('reportType', isEqualTo: 'Accident')
+          .get();
+
+      _trafficIncidents = snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error loading traffic incidents: $e');
+      _trafficIncidents = 0;
+    }
+  }
+
+  Future<void> _loadVehicleRegistrations() async {
+    try {
+      final snapshot = await _firestore.collection('registration').get();
+      _vehicleRegistrations = snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error loading registrations: $e');
+      _vehicleRegistrations = 0;
+    }
+  }
+
+  Future<void> _loadPassAppeals() async {
+    try {
+      final snapshot = await _firestore.collection('Appeal').get();
+      _passAppeals = snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error loading appeals: $e');
+      _passAppeals = 0;
+    }
+  }
+
+  Future<void> _loadIllegalParking() async {
+    try {
+      final snapshot = await _firestore
+          .collection('report')
+          .where('reportType', isEqualTo: 'Illegal Parking')
+          .get();
+
+      _illegalParking = snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error loading illegal parking: $e');
+      _illegalParking = 0;
+    }
+  }
 
   void _showFilterDialog() {
     DateTime tempFromDate = _fromDate;
@@ -263,6 +354,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                                 _selectedPeriod = tempSelectedPeriod;
                               });
                               Navigator.pop(context);
+                              _loadStatistics(); // Reload with new filter
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF8B4F52),
@@ -353,7 +445,11 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? const Center(
+        child: CircularProgressIndicator(color: Color(0xFF8B4F52)),
+      )
+          : SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -413,6 +509,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                               setState(() {
                                 _selectedMonth = newValue;
                               });
+                              _loadStatistics();
                             }
                           },
                         ),
@@ -469,7 +566,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                 children: [
                   _buildStatCard(
                     'Traffic\nIncidents',
-                    '247',
+                    _trafficIncidents.toString(),
                     '12% from last month',
                     const Color(0xFFFFE5E5),
                     Icons.warning,
@@ -478,7 +575,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                   ),
                   _buildStatCard(
                     'Vehicle\nRegistration',
-                    '3421',
+                    _vehicleRegistrations.toString(),
                     '8% from last month',
                     const Color(0xFFE5F5E5),
                     Icons.description,
@@ -487,7 +584,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                   ),
                   _buildStatCard(
                     'Pass\nAppeal',
-                    '1600',
+                    _passAppeals.toString(),
                     '12% from last month',
                     const Color(0xFFF3E5FF),
                     Icons.mail,
@@ -496,7 +593,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                   ),
                   _buildStatCard(
                     'Illegal\nParking',
-                    '50',
+                    _illegalParking.toString(),
                     '18% from last month',
                     const Color(0xFFFFF9E5),
                     Icons.local_parking,
