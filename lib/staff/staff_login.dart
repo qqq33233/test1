@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../roleSelection.dart';
 import 'staff_homepage.dart';
 
 class StaffLogin extends StatefulWidget {
@@ -154,7 +155,14 @@ class _StaffLoginState extends State<StaffLogin> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RoleSelectionScreen(),
+                      ),
+                    );
+                  },
                   child: const Icon(
                     Icons.chevron_left,
                     color: Colors.white,

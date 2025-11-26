@@ -17,7 +17,6 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
   final MapController _mapController = MapController();
 
 
-  // Default location (TAR UMT - based on your UI screenshot)
   final LatLng _defaultLocation = LatLng(3.2163, 101.7266);
 
 
