@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fyp/roleSelection.dart';
 import 'home_page.dart';
 import 'login_visitor.dart';
 
@@ -137,7 +138,14 @@ class _StutLoginState extends State<StutLogin> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RoleSelectionScreen(),
+                      ),
+                    );
+                  },
                   child: const Icon(
                     Icons.chevron_left,
                     color: Colors.white,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'pdf.dart';
 
 class SummaryStaffPage extends StatefulWidget {
   const SummaryStaffPage({Key? key}) : super(key: key);
@@ -118,6 +119,45 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
     } catch (e) {
       print('❌ Error loading illegal parking: $e');
       _illegalParking = 0;
+    }
+  }
+
+  Future<void> _downloadReport() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Generating report...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      await PDFReportGenerator.generateAndDownloadReport(
+        trafficIncidents: _trafficIncidents,
+        vehicleRegistrations: _vehicleRegistrations,
+        passAppeals: _passAppeals,
+        illegalParking: _illegalParking,
+        fromDate: _fromDate,
+        toDate: _toDate,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Report downloaded successfully!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error downloading report: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -517,15 +557,10 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Download Report Button
+                  // Download Report Button - ✅ 改这里
                   OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Downloading report...'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
+                    onPressed: () async {
+                      _downloadReport(); // 调用下载函数
                     },
                     icon: const Icon(
                       Icons.download,

@@ -14,6 +14,7 @@ import 'profile.dart';
 import 'locator.dart';
 import 'message.dart';
 import 'carPlate_scanner.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 class HomePage extends StatefulWidget {
   final String studentId;
@@ -35,9 +36,20 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<QuerySnapshot>? _unreadNotificationsSubscription;
   List<QuerySnapshot> _messageSnapshots = [];
 
+  // Dashboard carousel
+  late PageController _dashboardPageController;
+  int _currentDashboardPage = 0;
+  final List<String> _dashboardImages = [
+    'assets/dashboard_11.jpg',
+    'assets/dashboard_2.jpg',
+    'assets/dashboard_3.jpg',
+    'assets/dashboard_4.jpg',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _dashboardPageController = PageController();
     _loadStudentName();
     _checkUnreadMessages();
     _checkUnreadNotifications();
@@ -48,6 +60,7 @@ class _HomePageState extends State<HomePage> {
     _unreadMessagesSubscription1?.cancel();
     _unreadMessagesSubscription2?.cancel();
     _unreadNotificationsSubscription?.cancel();
+    _dashboardPageController.dispose();
     super.dispose();
   }
 
@@ -234,41 +247,56 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Dashboard Card
-                  Container(
-                    width: double.infinity,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Stack(
-                      children: [
-                        // Background image
-                        ClipRRect(
+                  // Dashboard Carousel Card
+                  Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: 200,
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.asset(
-                            'assets/dashboard_1.png',
-                            width: double.infinity,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          ),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
-                        // Text overlay
-                        const Positioned(
-                          top: 16,
-                          left: 16,
-                          child: Text(
-                            'LPR REGISTRATION\nNow AVAILABLE VIA INTRANET !!',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
+                        child: PageView.builder(
+                          controller: _dashboardPageController,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentDashboardPage = index;
+                            });
+                          },
+                          itemCount: _dashboardImages.length,
+                          itemBuilder: (context, index) {
+                            return Stack(
+                              children: [
+                                // Background image
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.asset(
+                                    _dashboardImages[index],
+                                    width: double.infinity,
+                                    height: 200,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Page indicator
+                      SmoothPageIndicator(
+                        controller: _dashboardPageController,
+                        count: _dashboardImages.length,
+                        effect: const ExpandingDotsEffect(
+                          dotColor: Colors.grey,
+                          activeDotColor: Color(0xFF4E6691),
+                          dotHeight: 8,
+                          dotWidth: 8,
+                          expansionFactor: 4,
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 32),
