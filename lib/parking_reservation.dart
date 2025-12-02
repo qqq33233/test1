@@ -5,8 +5,9 @@ import 'dart:async';
 
 // Helper function to convert UTC time to local timezone
 DateTime _convertToLocalTime(DateTime utcTime) {
-  // Add 8 hours to match local timezone
-  return utcTime.add(const Duration(hours: 16));
+  // Use Dart's built-in timezone conversion
+  // toDate() returns UTC, toLocal() converts to device's local timezone
+  return utcTime.toLocal();
 }
 
 class ParkingReservation extends StatefulWidget {

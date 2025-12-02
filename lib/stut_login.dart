@@ -118,9 +118,16 @@ class _StutLoginState extends State<StutLogin> {
       ),
     );
     
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          Navigator.pushReplacementNamed(context, '/');
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Column(
         children: [
           // Header Bar - Full width with back button
           Container(
@@ -137,7 +144,9 @@ class _StutLoginState extends State<StutLogin> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pushReplacementNamed(context, '/');
+                  },
                   child: const Icon(
                     Icons.chevron_left,
                     color: Colors.white,
@@ -287,6 +296,7 @@ class _StutLoginState extends State<StutLogin> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
