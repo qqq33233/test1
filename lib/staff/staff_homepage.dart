@@ -29,7 +29,6 @@ class _StaffHomePageState extends State<StaffHomePage> {
     {'image': 'assets/appealstaff.png', 'label': 'Appeal'},
     {'image': 'assets/passstaff.png', 'label': 'Registration'},
     {'image': 'assets/summary.png', 'label': 'Summary'},
-    {'image': 'assets/profile_logo.png', 'label': 'Profile'},
   ];
 
   @override
@@ -77,10 +76,20 @@ class _StaffHomePageState extends State<StaffHomePage> {
                       ),
                     ],
                   ),
-                  const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
-                    size: 28,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => StaffProfilePage(staffId: widget.staffId),
+                        ),
+                      );
+                    },
+                    child: const Icon(
+                      Icons.person_outline,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
                 ],
               ),
@@ -95,7 +104,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: 1.1,
+                    childAspectRatio: 1.5,
                   ),
                   itemCount: _functions.length,
                   itemBuilder: (context, index) {
@@ -128,13 +137,6 @@ class _StaffHomePageState extends State<StaffHomePage> {
                               builder: (context) => SummaryStaffPage(),
                             ),
                           );
-                        }else if (function['label'] == 'Profile') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => StaffProfilePage(staffId: widget.staffId),
-                            ),
-                          );
                         } else {
                           print('Tapped ${function['label']}');
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -147,7 +149,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
                       },
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8F8F8),
+                          color: const Color(0xFFFFF4F4),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -155,16 +157,15 @@ class _StaffHomePageState extends State<StaffHomePage> {
                           children: [
                             Image.asset(
                               function['image'],
-                              width: 60,
-                              height: 60,
+                              width: 45,
+                              height: 45,
                               fit: BoxFit.contain,
-                              color: Colors.black,
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             Text(
                               function['label'],
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.black87,
                               ),
