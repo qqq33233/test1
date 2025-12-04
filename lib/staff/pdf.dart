@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PDFReportGenerator {
   static Future<void> generateAndDownloadReport({
@@ -16,21 +17,23 @@ class PDFReportGenerator {
     required DateTime toDate,
   }) async {
     try {
-      print('📝 Starting PDF generation...');
-
       PermissionStatus status = await _requestStoragePermission();
 
       if (!status.isGranted) {
-        print('❌ Storage permission denied: $status');
         throw Exception('Storage permission denied.');
       }
-
-      print('✅ Storage permission granted');
 
       final pdf = pw.Document();
       final dateFormat = DateFormat('dd/MM/yyyy');
       final fromDateStr = dateFormat.format(fromDate);
       final toDateStr = dateFormat.format(toDate);
+
+      // Calculate trends (last month data)
+      final lastMonthData = await _getLastMonthData();
+      final trafficTrend = trafficIncidents - (lastMonthData['trafficIncidents'] ?? 0);
+      final registrationTrend = vehicleRegistrations - (lastMonthData['vehicleRegistrations'] ?? 0);
+      final appealTrend = passAppeals - (lastMonthData['passAppeals'] ?? 0);
+      final parkingTrend = illegalParking - (lastMonthData['illegalParking'] ?? 0);
 
       pdf.addPage(
         pw.Page(
@@ -39,28 +42,29 @@ class PDFReportGenerator {
           build: (pw.Context context) {
             return pw.Column(
               children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.center,
-                  children: [
-                    pw.Text(
-                      'TAR UMT',
-                      style: pw.TextStyle(
-                        fontSize: 20,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.red,
+                // Header without logo
+                pw.Center(
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'TAR UMT',
+                        style: pw.TextStyle(
+                          fontSize: 20,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red,
+                        ),
                       ),
-                    ),
-                    pw.SizedBox(width: 10),
-                    pw.Text(
-                      'UNIVERSITY OF MANAGEMENT AND TECHNOLOGY',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.normal,
+                      pw.Text(
+                        'UNIVERSITY OF MANAGEMENT AND TECHNOLOGY',
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.normal,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                pw.SizedBox(height: 10),
+                pw.SizedBox(height: 20),
                 pw.Center(
                   child: pw.Text(
                     'VEHICLE REPORT',
@@ -81,7 +85,6 @@ class PDFReportGenerator {
                   ),
                 ),
                 pw.SizedBox(height: 20),
-
                 pw.Table(
                   border: pw.TableBorder.all(
                     color: PdfColors.black,
@@ -94,43 +97,41 @@ class PDFReportGenerator {
                       ),
                       children: [
                         _buildTableCell('Type', isHeader: true),
-                        _buildTableCell('Case', isHeader: true),
-                        _buildTableCell('Trend', isHeader: true),
+                        _buildTableCell('Count', isHeader: true),
+                        _buildTableCell('Trends', isHeader: true),
                       ],
                     ),
                     pw.TableRow(
                       children: [
                         _buildTableCell('Traffic Incidents'),
                         _buildTableCell(trafficIncidents.toString()),
-                        _buildTableCell('- 200'),
+                        _buildTrendCell(trafficTrend),
                       ],
                     ),
                     pw.TableRow(
                       children: [
                         _buildTableCell('Vehicle Registration'),
                         _buildTableCell(vehicleRegistrations.toString()),
-                        _buildTableCell('+ 30'),
+                        _buildTrendCell(registrationTrend),
                       ],
                     ),
                     pw.TableRow(
                       children: [
                         _buildTableCell('Pass Appeal'),
                         _buildTableCell(passAppeals.toString()),
-                        _buildTableCell('- 20'),
+                        _buildTrendCell(appealTrend),
                       ],
                     ),
                     pw.TableRow(
                       children: [
                         _buildTableCell('Illegal Parking'),
                         _buildTableCell(illegalParking.toString()),
-                        _buildTableCell('+ 10'),
+                        _buildTrendCell(parkingTrend),
                       ],
                     ),
                   ],
                 ),
-
                 pw.SizedBox(height: 30),
-
                 pw.Container(
                   alignment: pw.Alignment.centerLeft,
                   child: pw.Text(
@@ -142,7 +143,6 @@ class PDFReportGenerator {
                   ),
                 ),
                 pw.SizedBox(height: 10),
-
                 pw.Container(
                   padding: pw.EdgeInsets.all(10),
                   decoration: pw.BoxDecoration(
@@ -169,9 +169,7 @@ class PDFReportGenerator {
                     ],
                   ),
                 ),
-
                 pw.Spacer(),
-
                 pw.Divider(color: PdfColors.grey400),
                 pw.SizedBox(height: 10),
                 pw.Center(
@@ -189,39 +187,105 @@ class PDFReportGenerator {
         ),
       );
 
-      await _saveAndOpenPDF(pdf, fromDateStr, toDateStr);
+      await _saveAndOpenPDF(pdf);
     } catch (e) {
-      print('❌ Error generating PDF: $e');
+      print('Error in PDF generation: $e');
       rethrow;
     }
   }
 
-  static Future<PermissionStatus> _requestStoragePermission() async {
-    if (Platform.isAndroid) {
-      final androidInfo = await DeviceInfoPlugin().androidInfo;
-      print('🤖 Android SDK Version: ${androidInfo.version.sdkInt}');
+  static Future<Map<String, int>> _getLastMonthData() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final now = DateTime.now();
+      final lastMonth = DateTime(now.year, now.month - 1);
 
-      if (androidInfo.version.sdkInt >= 30) {
-        print('📱 Using MANAGE_EXTERNAL_STORAGE permission (Android 11+)');
-        final status = await Permission.manageExternalStorage.request();
-        print('📱 MANAGE_EXTERNAL_STORAGE status: $status');
-        return status;
-      } else if (androidInfo.version.sdkInt >= 29) {
-        print('📱 Using WRITE_EXTERNAL_STORAGE permission (Android 10)');
-        final status = await Permission.storage.request();
-        print('📱 STORAGE status: $status');
-        return status;
-      } else {
-        print('📱 Using WRITE_EXTERNAL_STORAGE permission (Android 9)');
-        final status = await Permission.storage.request();
-        print('📱 STORAGE status: $status');
-        return status;
-      }
-    } else if (Platform.isIOS) {
-      print('🍎 iOS detected - requesting photo library permissions');
-      return await Permission.photos.request();
+      final firstDayLastMonth = DateTime(lastMonth.year, lastMonth.month, 1);
+      final lastDayLastMonth = DateTime(now.year, now.month, 0);
+
+      // Get all reports and filter by date in code
+      final allReports = await firestore
+          .collection('report')
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      final lastMonthReports = allReports.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return false;
+        final date = timestamp.toDate();
+        return date.isAfter(firstDayLastMonth) && date.isBefore(lastDayLastMonth.add(Duration(days: 1)));
+      }).toList();
+
+      final trafficIncidents = lastMonthReports
+          .where((doc) => doc.data()['reportType'] == 'Accident')
+          .length;
+
+      final illegalParking = lastMonthReports
+          .where((doc) => doc.data()['reportType'] == 'Illegal Parking')
+          .length;
+
+      final registrationSnapshot = await firestore
+          .collection('registration')
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      final lastMonthRegistrations = registrationSnapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return false;
+        final date = timestamp.toDate();
+        return date.isAfter(firstDayLastMonth) && date.isBefore(lastDayLastMonth.add(Duration(days: 1)));
+      }).length;
+
+      final appealSnapshot = await firestore
+          .collection('Appeal')
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      final lastMonthAppeals = appealSnapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return false;
+        final date = timestamp.toDate();
+        return date.isAfter(firstDayLastMonth) && date.isBefore(lastDayLastMonth.add(Duration(days: 1)));
+      }).length;
+
+      return {
+        'trafficIncidents': trafficIncidents,
+        'vehicleRegistrations': lastMonthRegistrations,
+        'passAppeals': lastMonthAppeals,
+        'illegalParking': illegalParking,
+      };
+    } catch (e) {
+      print('Error fetching last month data: $e');
+      return {
+        'trafficIncidents': 0,
+        'vehicleRegistrations': 0,
+        'passAppeals': 0,
+        'illegalParking': 0,
+      };
     }
-    return PermissionStatus.granted;
+  }
+
+  static Future<PermissionStatus> _requestStoragePermission() async {
+    try {
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+
+        if (androidInfo.version.sdkInt >= 30) {
+          return await Permission.manageExternalStorage.request();
+        } else {
+          return await Permission.storage.request();
+        }
+      } else if (Platform.isIOS) {
+        return await Permission.photos.request();
+      }
+      return PermissionStatus.granted;
+    } catch (e) {
+      print('Error requesting permission: $e');
+      return PermissionStatus.denied;
+    }
   }
 
   static pw.Widget _buildTableCell(String text, {bool isHeader = false}) {
@@ -237,19 +301,29 @@ class PDFReportGenerator {
     );
   }
 
-  static Future<void> _saveAndOpenPDF(
-      pw.Document pdf,
-      String fromDate,
-      String toDate,
-      ) async {
-    try {
-      print('💾 Saving PDF file...');
+  static pw.Widget _buildTrendCell(int trend) {
+    final trendText = trend > 0 ? '+$trend' : '$trend';
+    final color = trend > 0 ? PdfColors.red : PdfColors.green;
 
+    return pw.Padding(
+      padding: pw.EdgeInsets.all(8),
+      child: pw.Text(
+        trendText,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: pw.FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _saveAndOpenPDF(pw.Document pdf) async {
+    try {
       Directory? downloadDir;
 
       if (Platform.isAndroid) {
         downloadDir = await getExternalStorageDirectory();
-
         if (downloadDir == null) {
           downloadDir = Directory('/storage/emulated/0/Download');
         }
@@ -260,8 +334,6 @@ class PDFReportGenerator {
       if (downloadDir == null) {
         throw Exception('Could not find storage directory');
       }
-
-      print('📂 Download directory: ${downloadDir.path}');
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final fileName = 'Vehicle_Report_$timestamp.pdf';
@@ -274,10 +346,9 @@ class PDFReportGenerator {
       final file = File(filePath);
       await file.writeAsBytes(await pdf.save());
 
-      print('✅ PDF saved successfully to: $filePath');
-      print('📊 File size: ${(await file.length() / 1024).toStringAsFixed(2)} KB');
+      print('PDF saved to: $filePath');
     } catch (e) {
-      print('❌ Error saving PDF: $e');
+      print('Error saving PDF: $e');
       rethrow;
     }
   }
