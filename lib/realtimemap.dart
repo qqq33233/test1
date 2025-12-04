@@ -36,7 +36,6 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
     setState(() => isLoading = true);
 
     try {
-      // Try Method 1: Flow Segment Data (Most reliable)
       print('🔍 Trying Traffic Flow API...');
 
       final url =
@@ -44,7 +43,7 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
           '?point=${_location.latitude},${_location.longitude}'
           '&key=$_apiKey';
 
-      print('📍 URL: $url');
+      print('URL: $url');
 
       final response = await http.get(Uri.parse(url)).timeout(Duration(seconds: 10));
 
@@ -57,11 +56,10 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
         if (data['flowSegmentData'] != null) {
           final flowData = data['flowSegmentData'];
 
-          // For relative speed: 100 = free flow, 0 = stopped
           int relativeSpeed = (flowData['freeFlowSpeed'] as num?)?.toInt() ?? 100;
           int currentSpeed = (flowData['currentSpeed'] as num?)?.toInt() ?? 0;
 
-          print('✅ Got traffic data!');
+          print('Got traffic data!');
           print('   Current: $currentSpeed km/h');
           print('   Free Flow: $relativeSpeed km/h');
 
@@ -74,11 +72,11 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
             isJammed = jammed;
 
             if (jammed) {
-              statusMessage = '🔴 Traffic Jammed - ${100 - relativeSpeed}% congested';
+              statusMessage = 'Traffic Jammed - ${100 - relativeSpeed}% congested';
             } else if (relativeSpeed < 70) {
-              statusMessage = '🟡 Moderate Traffic - ${100 - relativeSpeed}% congested';
+              statusMessage = 'Moderate Traffic - ${100 - relativeSpeed}% congested';
             } else {
-              statusMessage = '✅ Free Flow - ${100 - relativeSpeed}% congested';
+              statusMessage = 'Free Flow - ${100 - relativeSpeed}% congested';
             }
 
             isLoading = false;
@@ -93,16 +91,16 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
           throw Exception('No flowSegmentData in response');
         }
       } else if (response.statusCode == 403) {
-        print('❌ 403 Forbidden - Trying alternative endpoint...');
+        print('403 Forbidden - Trying alternative endpoint...');
         _tryAlternativeEndpoint();
       } else if (response.statusCode == 404) {
-        print('❌ 404 Not Found - Trying alternative endpoint...');
+        print('404 Not Found - Trying alternative endpoint...');
         _tryAlternativeEndpoint();
       } else {
         throw Exception('API Error: ${response.statusCode}');
       }
     } catch (e) {
-      print('💥 Error: $e');
+      print('Error: $e');
       if (!mounted) return;
 
       setState(() {
@@ -124,7 +122,7 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
           '&key=$_apiKey'
           '&language=en';
 
-      print('📍 Alternative URL: $url');
+      print('Alternative URL: $url');
 
       final response = await http.get(Uri.parse(url)).timeout(Duration(seconds: 10));
 
@@ -148,8 +146,8 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
         setState(() {
           isJammed = jamCount > 0;
           statusMessage = isJammed
-              ? '🔴 Traffic Jammed - $jamCount incident(s) detected'
-              : '✅ No traffic jams detected';
+              ? 'Traffic Jammed - $jamCount incident(s) detected'
+              : 'No traffic jams detected';
           isLoading = false;
         });
 
@@ -163,7 +161,7 @@ class _RealTimeTrafficScreenState extends State<RealTimeTrafficScreen> {
         });
       }
     } catch (e) {
-      print('💥 Alternative endpoint error: $e');
+      print('Alternative endpoint error: $e');
       if (!mounted) return;
 
       setState(() {

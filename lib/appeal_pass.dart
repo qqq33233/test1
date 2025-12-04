@@ -17,7 +17,6 @@ class VehicleAppealScreen extends StatefulWidget {
 class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Store 3 separate PDFs
   PlatformFile? _electricityBill;
   PlatformFile? _carRegistration;
   PlatformFile? _appealLetter;
@@ -25,11 +24,11 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
   bool _isLoading = true;
   bool _canAppeal = false;
   bool _hasAlreadyAppealed = false;
-  bool _hasAppealResult = false; // NEW
+  bool _hasAppealResult = false;
   String _studentName = '';
   String _registrationId = '';
   String? _registrationStatus;
-  String? _appealStatus; // NEW
+  String? _appealStatus;
 
   @override
   void initState() {
@@ -41,7 +40,6 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
     try {
       print('🔍 Checking appeal eligibility for: ${widget.studentId}');
 
-      // Get student name
       final studentQuery = await _firestore
           .collection('student')
           .where('stdID', isEqualTo: widget.studentId)
@@ -54,7 +52,6 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
         print('✅ Student Name: $_studentName');
       }
 
-      // Get student's vehicle
       final vehicleQuery = await _firestore
           .collection('vehicle')
           .where('studentID', isEqualTo: widget.studentId)
@@ -73,7 +70,6 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
       final carPlateNumber = vehicleQuery.docs.first.data()['carPlateNumber'];
       print('📋 Car Plate: $carPlateNumber');
 
-      // Check registration status
       final registrationQuery = await _firestore
           .collection('registration')
           .where('carplateNumber', isEqualTo: carPlateNumber)
@@ -94,7 +90,6 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
       _registrationStatus = regData['regStatus'];
       print('📋 Registration Status: $_registrationStatus');
 
-      // Check if appeal exists
       final appealQuery = await _firestore
           .collection('Appeal')
           .where('carPlateNumber', isEqualTo: carPlateNumber)
@@ -105,15 +100,12 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
         _appealStatus = appealQuery.docs.first.data()['appStatus'];
         print('📋 Appeal Status: $_appealStatus');
 
-        // Has appeal result if status is approved or failed
         _hasAppealResult = _appealStatus?.toLowerCase() == 'approved' ||
             _appealStatus?.toLowerCase() == 'failed';
 
-        // Has already appealed if status is pending or approved
         _hasAlreadyAppealed = _appealStatus?.toLowerCase() == 'pending' ||
             _appealStatus?.toLowerCase() == 'approved';
 
-        // Can appeal if registration is failed AND (no appeal OR appeal was rejected)
         _canAppeal = _registrationStatus?.toLowerCase() == 'failed' &&
             (_appealStatus?.toLowerCase() == 'failed' || _appealStatus == null);
       } else {
@@ -374,7 +366,6 @@ class _VehicleAppealScreenState extends State<VehicleAppealScreen> {
     );
   }
 
-  // NEW: Appeal Result Screen
   Widget _buildAppealResultScreen() {
     final isApproved = _appealStatus?.toLowerCase() == 'approved';
     final isRejected = _appealStatus?.toLowerCase() == 'failed';

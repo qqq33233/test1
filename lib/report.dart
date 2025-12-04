@@ -33,7 +33,7 @@ class _ReportScreenState extends State<ReportScreen> {
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 60, // Reduced quality for smaller base64 size
+        imageQuality: 60,
       );
 
       if (image != null) {
@@ -106,7 +106,6 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _uploadReport() async {
-    // Validate inputs
     if (_plateController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -132,11 +131,9 @@ class _ReportScreenState extends State<ReportScreen> {
     });
 
     try {
-      // Get next report ID
       String reportId = await _getNextReportId();
       print('Report ID: $reportId');
 
-      // Convert image to base64 if selected
       String? base64Image;
       if (_selectedImage != null) {
         base64Image = await _convertImageToBase64(_selectedImage!);
@@ -145,7 +142,6 @@ class _ReportScreenState extends State<ReportScreen> {
         }
       }
 
-      // Save to Firestore with base64 image
       await _firestore.collection('report').doc(reportId).set({
         'carPlateNo': _plateController.text.trim(),
         'description': _messageController.text.trim(),
@@ -166,7 +162,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         );
 
-        // Clear form
         setState(() {
           _plateController.clear();
           _messageController.clear();
@@ -225,7 +220,6 @@ class _ReportScreenState extends State<ReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Car Plate Number
                   const Text(
                     'Enter Car Plate Number',
                     style: TextStyle(
@@ -256,7 +250,6 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Report Type Selection
                   const Text(
                     'Report Type',
                     style: TextStyle(
@@ -306,7 +299,6 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Upload Photo
                   const Text(
                     'Upload Your Photo',
                     style: TextStyle(
@@ -396,7 +388,6 @@ class _ReportScreenState extends State<ReportScreen> {
                     ),
                   const SizedBox(height: 32),
 
-                  // Message
                   const Text(
                     'Add Your Message',
                     style: TextStyle(
@@ -430,7 +421,6 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
           ),
 
-          // Upload Button
           Padding(
             padding: const EdgeInsets.all(24),
             child: SizedBox(

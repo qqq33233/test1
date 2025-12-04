@@ -7,9 +7,7 @@ import 'home_page.dart';
 import 'profile.dart';
 import 'chat_page.dart';
 
-// Helper function to convert UTC time to local timezone
 DateTime _convertToLocalTime(DateTime utcTime) {
-  // Add 8 hours to match local timezone
   return utcTime.add(const Duration(hours: 16));
 }
 
@@ -23,7 +21,7 @@ class MessagePage extends StatefulWidget {
 }
 
 class _MessagePageState extends State<MessagePage> {
-  int _selectedIndex = 1; // Message is selected
+  int _selectedIndex = 1;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<MessageItem> _messages = [];
   StreamSubscription<QuerySnapshot>? _messagesSubscription;
@@ -40,12 +38,10 @@ class _MessagePageState extends State<MessagePage> {
     _markAllAsRead();
   }
 
-  // Mark all conversations as read when message page is opened
   Future<void> _markAllAsRead() async {
     if (widget.studentId == null) return;
     
     try {
-      // Get all conversations where current user is involved
       final query1 = await _firestore
           .collection('messages')
           .where('stdID1', isEqualTo: widget.studentId)
@@ -73,7 +69,6 @@ class _MessagePageState extends State<MessagePage> {
       
       await batch.commit();
       
-      // Update local state to hide red dot immediately
       if (mounted) {
         setState(() {
           _hasUnreadMessages = false;
@@ -95,7 +90,6 @@ class _MessagePageState extends State<MessagePage> {
   void _checkUnreadMessages() {
     if (widget.studentId == null) return;
 
-    // Listen for messages where current student is stdID1
     _unreadMessagesSubscription1 = _firestore
         .collection('messages')
         .where('stdID1', isEqualTo: widget.studentId)
@@ -104,7 +98,6 @@ class _MessagePageState extends State<MessagePage> {
       _updateUnreadStatus(snapshot, 0);
     });
 
-    // Listen for messages where current student is stdID2
     _unreadMessagesSubscription2 = _firestore
         .collection('messages')
         .where('stdID2', isEqualTo: widget.studentId)
@@ -115,16 +108,12 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _updateUnreadStatus(QuerySnapshot snapshot, int index) {
-    // Store snapshot at the appropriate index
     if (_messageSnapshots.length <= index) {
       _messageSnapshots.addAll(List.filled(index + 1 - _messageSnapshots.length, snapshot));
     } else {
       _messageSnapshots[index] = snapshot;
     }
-    
-    // Check all snapshots for unread messages
-    // Message is unread if lastSenderId is not the current user AND
-    // the lastUpdated time is after the last read time
+
     bool hasUnread = false;
     for (var snap in _messageSnapshots) {
       for (var doc in snap.docs) {
@@ -158,10 +147,9 @@ class _MessagePageState extends State<MessagePage> {
   void _loadMessages() {
     if (widget.studentId == null) return;
 
-    // Load messages where current student is involved (stdID1 or stdID2) - match Firebase field names
     _messagesSubscription = _firestore
         .collection('messages')
-        .where('stdID1', isEqualTo: widget.studentId) // Match Firebase: stdID1
+        .where('stdID1', isEqualTo: widget.studentId)
         .orderBy('lastUpdated', descending: true)
         .snapshots()
         .listen((snapshot) {
@@ -173,7 +161,7 @@ class _MessagePageState extends State<MessagePage> {
     // Also listen for messages where student is stdID2
     _firestore
         .collection('messages')
-        .where('stdID2', isEqualTo: widget.studentId) // Match Firebase: stdID2
+        .where('stdID2', isEqualTo: widget.studentId)
         .orderBy('lastUpdated', descending: true)
         .snapshots()
         .listen((snapshot) {
@@ -207,16 +195,14 @@ class _MessagePageState extends State<MessagePage> {
       final lastUpdatedUtc = (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now();
       final lastUpdated = _convertToLocalTime(lastUpdatedUtc);
       
-      // Determine recipient student ID (the other person in the chat)
       String? recipientStudentId;
       
-      if (data['stdID1'] == widget.studentId) { // Match Firebase: stdID1
-        recipientStudentId = data['stdID2'] as String?; // Match Firebase: stdID2
+      if (data['stdID1'] == widget.studentId) {
+        recipientStudentId = data['stdID2'] as String?;
       } else {
-        recipientStudentId = data['stdID1'] as String?; // Match Firebase: stdID1
+        recipientStudentId = data['stdID1'] as String?;
       }
       
-      // Always get the name of the person we're chatting with
       String senderName = 'Student';
       if (recipientStudentId != null) {
         try {
@@ -345,7 +331,7 @@ class _MessagePageState extends State<MessagePage> {
               children: [
                 _buildNavItem('assets/home_logo.png', 'Home', 0),
                 _buildNavItem('assets/message_logo.png', 'Message', 1),
-                const SizedBox(width: 40), // Space for center button
+                const SizedBox(width: 40),
                 _buildNavItem('assets/notification_logo.png', 'Notification', 3),
                 _buildNavItem('assets/profile_logo.png', 'Profile', 4),
               ],
