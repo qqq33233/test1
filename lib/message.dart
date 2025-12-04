@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -184,6 +185,7 @@ class _MessagePageState extends State<MessagePage> {
           message: 'No messages',
           time: DateTime.now(),
           profileImage: 'assets/profile.png',
+          profileImageUrl: null,
           studentId: null,
           chatId: doc.id,
           isUnread: false,
@@ -203,7 +205,9 @@ class _MessagePageState extends State<MessagePage> {
         recipientStudentId = data['stdID1'] as String?;
       }
       
+      // Always get the name and profile image of the person we're chatting with
       String senderName = 'Student';
+      String? profileImageUrl;
       if (recipientStudentId != null) {
         try {
           final studentQuery = await _firestore
@@ -215,11 +219,12 @@ class _MessagePageState extends State<MessagePage> {
           if (studentQuery.docs.isNotEmpty) {
             final studentData = studentQuery.docs.first.data();
             senderName = studentData['stdName'] as String? ?? 'Student $recipientStudentId';
+            profileImageUrl = studentData['profileImageUrl'] as String?;
           } else {
             senderName = 'Student $recipientStudentId';
           }
         } catch (e) {
-          print('[Message Page] Error fetching student name: $e');
+          print('[Message Page] Error fetching student data: $e');
           senderName = 'Student $recipientStudentId';
         }
       }
@@ -241,6 +246,7 @@ class _MessagePageState extends State<MessagePage> {
         message: lastMessage,
         time: lastUpdated,
         profileImage: 'assets/profile.png',
+        profileImageUrl: profileImageUrl,
         studentId: recipientStudentId,
         chatId: doc.id,
         isUnread: isUnread,
@@ -407,7 +413,7 @@ class _MessagePageState extends State<MessagePage> {
               senderName: message.senderName,
               currentStudentId: widget.studentId, // Current logged-in student
               recipientStudentId: message.studentId, // Other student in the chat
-              profileImage: message.profileImage,
+              profileImage: message.profileImageUrl ?? message.profileImage,
               chatId: message.chatId,
             ),
           ),
@@ -433,11 +439,13 @@ class _MessagePageState extends State<MessagePage> {
             CircleAvatar(
               radius: 25,
               backgroundColor: Colors.grey[300],
-              backgroundImage: AssetImage(message.profileImage),
+              backgroundImage: _getProfileImageProvider(message.profileImageUrl),
               onBackgroundImageError: (exception, stackTrace) {
                 // Fallback icon will show if image doesn't load
               },
-              child: const Icon(Icons.person, color: Colors.grey),
+              child: message.profileImageUrl == null || message.profileImageUrl!.isEmpty
+                  ? const Icon(Icons.person, color: Colors.grey)
+                  : null,
             ),
             const SizedBox(width: 12),
             // Message Content
@@ -502,6 +510,24 @@ class _MessagePageState extends State<MessagePage> {
         ),
       ),
     );
+  }
+
+  ImageProvider _getProfileImageProvider(String? profileImageUrl) {
+    if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+      if (profileImageUrl.startsWith('http')) {
+        return NetworkImage(profileImageUrl);
+      } else {
+        try {
+          final decodedBytes = base64Decode(profileImageUrl);
+          return MemoryImage(decodedBytes);
+        } catch (e) {
+          print('[Message Page] Error decoding base64 profile image: $e');
+          return const AssetImage('assets/profile.png');
+        }
+      }
+    } else {
+      return const AssetImage('assets/profile.png');
+    }
   }
 
   Widget _buildNavItem(String imagePath, String label, int index) {
@@ -583,6 +609,7 @@ class MessageItem {
   final String message;
   final DateTime time;
   final String profileImage;
+  final String? profileImageUrl;
   final String? studentId;
   final String? chatId;
   final bool isUnread;
@@ -592,6 +619,7 @@ class MessageItem {
     required this.message,
     required this.time,
     required this.profileImage,
+    this.profileImageUrl,
     this.studentId,
     this.chatId,
     this.isUnread = false,
