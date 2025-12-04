@@ -34,28 +34,24 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
       return;
     }
 
-    try {
-      final staffQuery = await _firestore
-          .collection('staff')
-          .where('staffID', isEqualTo: widget.staffId)
-          .limit(1)
-          .get();
+    final staffQuery = await _firestore
+        .collection('staff')
+        .where('staffId', isEqualTo: widget.staffId)
+        .limit(1)
+        .get();
 
-      if (staffQuery.docs.isNotEmpty) {
-        final staffData = staffQuery.docs.first.data();
-        setState(() {
-          _staffName = staffData['name'] as String? ?? 'N/A';
-          _staffId = staffData['staffID'] as String? ?? widget.staffId;
-          _email = staffData['email'] as String? ?? 'N/A';
-        });
-      }
-    } catch (e) {
-      print('Error loading staff data: $e');
-    } finally {
+    if (staffQuery.docs.isNotEmpty) {
+      final staffData = staffQuery.docs.first.data();
       setState(() {
-        _isLoading = false;
+        _staffName = staffData['name'] as String? ?? 'N/A';
+        _staffId = staffData['staffId'] as String? ?? widget.staffId;
+        _email = staffData['email'] as String? ?? 'N/A';
       });
     }
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   void _handleLogout() {
@@ -132,8 +128,6 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-
-            // Staff Details Card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -162,8 +156,6 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
                   const SizedBox(height: 16),
                   const Divider(thickness: 1, color: Colors.grey, height: 20),
                   const SizedBox(height: 16),
-
-                  // Full Name and Staff ID - Side by side
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -172,21 +164,20 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: _InfoText(title: 'Staff ID', value: _staffId ?? widget.staffId ?? 'N/A', alignRight: true),
+                        child: _InfoText(
+                          title: 'Staff ID',
+                          value: _staffId ?? widget.staffId ?? 'N/A',
+                          alignRight: true,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // Email - Full width
                   _InfoText(title: 'Email', value: _email ?? 'N/A'),
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Logout Button
             Center(
               child: Container(
                 width: double.infinity,
