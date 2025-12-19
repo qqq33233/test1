@@ -5,8 +5,8 @@ import 'dart:async';
 
 // Helper function to convert UTC time to local timezone
 DateTime _convertToLocalTime(DateTime utcTime) {
-  // Add 8 hours to match local timezone
-  return utcTime.add(const Duration(hours: 16));
+  // Add 8 hours to convert from UTC to UTC+8 (Malaysia timezone)
+  return utcTime.add(const Duration(hours: 8));
 }
 
 class ParkingReservation extends StatefulWidget {
@@ -28,12 +28,16 @@ class _ParkingReservationState extends State<ParkingReservation>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // Check for expired reservations every minute
-    _expirationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    // Check for expired reservations every 60 seconds (once per minute)
+    // This ensures we only check once per minute, preventing premature updates
+    _expirationTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _checkAndUpdateExpiredReservations();
     });
-    // Also check immediately when page loads
-    _checkAndUpdateExpiredReservations();
+    // Delay initial check to avoid processing brand new reservations
+    // Wait 10 seconds to ensure server timestamps are properly set and reservation is established
+    Future.delayed(const Duration(seconds: 10), () {
+      _checkAndUpdateExpiredReservations();
+    });
   }
 
   @override
@@ -43,64 +47,130 @@ class _ParkingReservationState extends State<ParkingReservation>
     super.dispose();
   }
 
-  // Check and update reservations that are older than 5 minutes
+  // Check and update reservations that are older than 1 minute
+  // IMPORTANT: This function ONLY UPDATES status to "History", it NEVER DELETES documents
+  // All reservations are preserved in the database with "History" status
   Future<void> _checkAndUpdateExpiredReservations() async {
     try {
       final now = DateTime.now();
       
-      // Get all Reserved reservations (temporary reservations - need to be released after 5 minutes)
+      // Handle old "Reserved" status reservations (for backward compatibility)
+      // Convert them to "UpComing" immediately so they follow the normal flow
       final reservedReservations = await _firestore
           .collection('ParkingSpotReservation')
           .where('spotRsvtStatus', isEqualTo: 'Reserved')
           .get();
 
-      // Release Reserved spots that are older than 5 minutes
+      print('DEBUG: Checking ${reservedReservations.docs.length} Reserved reservations (converting to UpComing)');
+      
       for (var doc in reservedReservations.docs) {
         final data = doc.data();
-        final rsvTime = data['rsvTime'] as Timestamp?;
+        final status = data['spotRsvtStatus'] as String?;
         
-        if (rsvTime != null) {
-          // Convert UTC timestamp to local timezone for comparison
-          final reservationTime = rsvTime.toDate();
-          final localReservationTime = _convertToLocalTime(reservationTime);
-          
-          // Calculate difference in minutes
-          final difference = now.difference(localReservationTime);
-          
-          // If 5 minutes or more have passed, delete the reservation (release the spot)
-          if (difference.inMinutes >= 5) {
-            await doc.reference.delete();
-            print('Released reserved spot ${doc.id} (${difference.inMinutes} minutes old) - spot now available to others');
-          }
+        // Safety check: Only process "Reserved" status
+        if (status != 'Reserved') {
+          continue;
+        }
+        
+        // Convert Reserved to UpComing immediately (for backward compatibility with old reservations)
+        try {
+          await doc.reference.update({
+            'spotRsvtStatus': 'UpComing',
+          });
+          print('SUCCESS: Converted Reserved reservation ${doc.id} to UpComing');
+        } catch (e) {
+          print('ERROR: Failed to convert Reserved reservation ${doc.id}: $e');
         }
       }
       
       // Get all upcoming reservations for this student (confirmed reservations)
+      // IMPORTANT: These should be UPDATED to "History", NEVER DELETED
       final upcomingReservations = await _firestore
           .collection('ParkingSpotReservation')
           .where('stdID', isEqualTo: widget.studentId)
           .where('spotRsvtStatus', isEqualTo: 'UpComing')
           .get();
 
+      print('DEBUG: Found ${upcomingReservations.docs.length} UpComing reservations to check');
+
       for (var doc in upcomingReservations.docs) {
         final data = doc.data();
         final rsvTime = data['rsvTime'] as Timestamp?;
+        final currentStatus = data['spotRsvtStatus'] as String?;
+        
+        // Safety check: Make sure we're only processing UpComing reservations
+        if (currentStatus != 'UpComing') {
+          print('WARNING: Skipping doc ${doc.id} - status is "$currentStatus", expected "UpComing"');
+          continue;
+        }
         
         if (rsvTime != null) {
-          // Convert UTC timestamp to local timezone for comparison
-          final reservationTime = rsvTime.toDate();
-          final localReservationTime = _convertToLocalTime(reservationTime);
+          // Use timestamp seconds directly (UTC) for accurate comparison
+          // Firestore Timestamp.seconds is already in UTC epoch seconds
+          final reservationSeconds = rsvTime.seconds;
+          final currentUtcSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
           
-          // Calculate difference in minutes
-          final difference = now.difference(localReservationTime);
+          // Calculate difference in seconds (both in UTC)
+          final differenceSeconds = currentUtcSeconds - reservationSeconds;
           
-          // If 5 minutes or more have passed, update to History
-          if (difference.inMinutes >= 5) {
-            await doc.reference.update({
-              'spotRsvtStatus': 'History',
-            });
-            print('Updated reservation ${doc.id} to History (${difference.inMinutes} minutes old)');
+          print('DEBUG: Checking UpComing reservation ${doc.id}');
+          print('  Current status: $currentStatus');
+          print('  Reservation UTC seconds: $reservationSeconds');
+          print('  Current UTC seconds: $currentUtcSeconds');
+          print('  Difference: $differenceSeconds seconds (${differenceSeconds ~/ 60} minutes)');
+          
+          // IMPORTANT: Only process if reservation is at least 1 minute old
+          // Skip if difference is negative (future timestamp) - this can happen with server timestamp delays
+          if (differenceSeconds < 0) {
+            print('SKIP: Reservation ${doc.id} has future timestamp (${differenceSeconds} seconds), skipping - timestamp not set yet');
+            continue;
           }
+          
+          // Skip if less than 1 minute (60 seconds) old - MUST wait full minute
+          // Require at least 65 seconds to ensure full minute has passed (5 second buffer for safety)
+          if (differenceSeconds < 65) {
+            print('SKIP: Reservation ${doc.id} is only $differenceSeconds seconds old (need 65+), keeping as UpComing');
+            continue;
+          }
+          
+          // If 1 minute (60 seconds) or more have passed, UPDATE to History (DO NOT DELETE)
+          if (differenceSeconds >= 60) {
+            try {
+              print('ACTION: Updating reservation ${doc.id} from UpComing to History...');
+              
+              // IMPORTANT: UPDATE status to History, DO NOT DELETE
+              await doc.reference.update({
+                'spotRsvtStatus': 'History',
+              });
+              
+              print('SUCCESS: Updated reservation ${doc.id} to History (${differenceSeconds} seconds old)');
+              
+              // Wait a moment for Firestore to propagate
+              await Future.delayed(const Duration(milliseconds: 500));
+              
+              // Verify the update - document should still exist with History status
+              final verifyDoc = await doc.reference.get();
+              if (verifyDoc.exists) {
+                final verifyData = verifyDoc.data() as Map<String, dynamic>?;
+                final status = verifyData?['spotRsvtStatus'];
+                print('VERIFY: Document ${doc.id} still exists with status: $status');
+                if (status == 'History') {
+                  print('CONFIRMED: Status successfully updated to History - document preserved');
+                } else {
+                  print('WARNING: Status is "$status" instead of "History"');
+                }
+              } else {
+                print('ERROR: Document ${doc.id} was DELETED! This should not happen for UpComing reservations!');
+              }
+            } catch (e) {
+              print('ERROR: Failed to update reservation ${doc.id}: $e');
+              print('ERROR: Stack trace: ${StackTrace.current}');
+            }
+          } else {
+            print('SKIP: Reservation ${doc.id} is only $differenceSeconds seconds old (need 60+)');
+          }
+        } else {
+          print('WARNING: Reservation ${doc.id} has no rsvTime, skipping');
         }
       }
     } catch (e) {
@@ -119,26 +189,35 @@ class _ParkingReservationState extends State<ParkingReservation>
       print('DEBUG: ==========================================');
       print('DEBUG: Student ID: ${widget.studentId}');
       print('DEBUG: Total documents found: ${allDocs.docs.length}');
+      
+      int historyCount = 0;
+      int upcomingCount = 0;
+      
       for (var doc in allDocs.docs) {
         final data = doc.data();
+        final status = data['spotRsvtStatus'];
+        if (status == 'History') historyCount++;
+        if (status == 'UpComing') upcomingCount++;
+        
         print('DEBUG: Document ID: ${doc.id}');
         print('DEBUG:   - stdID: ${data['stdID']} (type: ${data['stdID'].runtimeType})');
-        print('DEBUG:   - spotRsvtStatus: ${data['spotRsvtStatus']} (type: ${data['spotRsvtStatus'].runtimeType})');
+        print('DEBUG:   - spotRsvtStatus: $status (type: ${status.runtimeType})');
         print('DEBUG:   - spotLocation: ${data['spotLocation']}');
         print('DEBUG:   - spotRsvtID: ${data['spotRsvtID']}');
         print('DEBUG:   - rsvTime: ${data['rsvTime']}');
         print('DEBUG: ---');
       }
-      // Also check all documents without filter
-      final allDocsNoFilter = await _firestore
+      
+      print('DEBUG: Summary - History: $historyCount, UpComing: $upcomingCount');
+      
+      // Check History documents specifically
+      final historyDocs = await _firestore
           .collection('ParkingSpotReservation')
-          .limit(10)
+          .where('stdID', isEqualTo: widget.studentId)
+          .where('spotRsvtStatus', isEqualTo: 'History')
           .get();
-      print('DEBUG: First 10 documents in collection (no filter):');
-      for (var doc in allDocsNoFilter.docs) {
-        final data = doc.data();
-        print('DEBUG: Doc ID: ${doc.id}, stdID: ${data['stdID']}, Status: ${data['spotRsvtStatus']}');
-      }
+      print('DEBUG: History query returned ${historyDocs.docs.length} documents');
+      
       print('DEBUG: ==========================================');
     } catch (e) {
       print('DEBUG Error: $e');
@@ -238,7 +317,7 @@ class _ParkingReservationState extends State<ParkingReservation>
       stream: _firestore
           .collection('ParkingSpotReservation')
           .where('stdID', isEqualTo: widget.studentId)
-          .where('spotRsvtStatus', whereIn: ['Reserved', 'UpComing'])
+          .where('spotRsvtStatus', isEqualTo: 'UpComing')
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -250,28 +329,14 @@ class _ParkingReservationState extends State<ParkingReservation>
         }
 
         if (snapshot.hasError) {
-          // Debug: Print error and check what data exists
           print('DEBUG UpComing Error: ${snapshot.error}');
-          _debugFirebaseData();
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('Error: ${snapshot.error}'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _debugFirebaseData,
-                  child: const Text('Debug: Check Firebase'),
-                ),
-              ],
-            ),
+            child: Text('Error: ${snapshot.error}'),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          // Debug: Check what data actually exists
           print('DEBUG UpComing: No data found for student ${widget.studentId}');
-          _debugFirebaseData();
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(32.0),
@@ -311,8 +376,10 @@ class _ParkingReservationState extends State<ParkingReservation>
             String timeText = '';
             if (rsvTime != null) {
               // Convert UTC timestamp to local DateTime for display
-              final dateTime = rsvTime.toDate();
-              final localDateTime = _convertToLocalTime(dateTime);
+              // Firestore Timestamp stores UTC, toDate() returns DateTime, toUtc() ensures UTC interpretation
+              final utcDateTime = rsvTime.toDate().toUtc();
+              // Convert to UTC+8 (Malaysia timezone) by adding 8 hours
+              final localDateTime = utcDateTime.add(const Duration(hours: 8));
               dateText = DateFormat('MMM dd, yyyy').format(localDateTime);
               // Format time in 12-hour format
               final hour = localDateTime.hour;
@@ -342,13 +409,20 @@ class _ParkingReservationState extends State<ParkingReservation>
   }
 
   Widget _buildHistoryTab() {
+    print('DEBUG History Tab: Building with studentId: "${widget.studentId}" (type: ${widget.studentId.runtimeType})');
+    
+    // Use studentId as string - Firestore stores stdID as string
+    final queryStudentId = widget.studentId.toString().trim();
+    
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
           .collection('ParkingSpotReservation')
-          .where('stdID', isEqualTo: widget.studentId)
+          .where('stdID', isEqualTo: queryStudentId)
           .where('spotRsvtStatus', isEqualTo: 'History')
           .snapshots(),
       builder: (context, snapshot) {
+        print('DEBUG History StreamBuilder: connectionState=${snapshot.connectionState}, hasData=${snapshot.hasData}, hasError=${snapshot.hasError}');
+        
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(
@@ -359,15 +433,29 @@ class _ParkingReservationState extends State<ParkingReservation>
 
         if (snapshot.hasError) {
           print('DEBUG History Error: ${snapshot.error}');
-          _debugFirebaseData();
           return Center(
             child: Text('Error: ${snapshot.error}'),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          print('DEBUG History: No data found for student ${widget.studentId}');
-          _debugFirebaseData();
+          print('DEBUG History: No data found for student "${widget.studentId}"');
+          print('DEBUG History: Query returned ${snapshot.data?.docs.length ?? 0} documents');
+          
+          // Try to query all documents for this student to see what exists
+          _firestore
+              .collection('ParkingSpotReservation')
+              .where('stdID', isEqualTo: queryStudentId)
+              .get()
+              .then((allDocs) {
+                print('DEBUG History: Total docs for studentId "${queryStudentId}": ${allDocs.docs.length}');
+                for (var doc in allDocs.docs) {
+                  final data = doc.data();
+                  final status = data['spotRsvtStatus'];
+                  print('DEBUG History: Doc ${doc.id} - status: "$status" (type: ${status.runtimeType}), stdID: ${data['stdID']} (type: ${data['stdID'].runtimeType})');
+                }
+              });
+          
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(32.0),
@@ -381,6 +469,8 @@ class _ParkingReservationState extends State<ParkingReservation>
             ),
           );
         }
+        
+        print('DEBUG History: Found ${snapshot.data!.docs.length} history documents');
 
         // Sort documents by rsvTime (descending - newest first)
         final sortedDocs = List.from(snapshot.data!.docs);
@@ -406,8 +496,10 @@ class _ParkingReservationState extends State<ParkingReservation>
             String timeText = '';
             if (rsvTime != null) {
               // Convert UTC timestamp to local DateTime for display
-              final dateTime = rsvTime.toDate();
-              final localDateTime = _convertToLocalTime(dateTime);
+              // Firestore Timestamp stores UTC, toDate() returns DateTime, toUtc() ensures UTC interpretation
+              final utcDateTime = rsvTime.toDate().toUtc();
+              // Convert to UTC+8 (Malaysia timezone) by adding 8 hours
+              final localDateTime = utcDateTime.add(const Duration(hours: 8));
               dateText = DateFormat('MMM dd, yyyy').format(localDateTime);
               // Format time in 12-hour format
               final hour = localDateTime.hour;

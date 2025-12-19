@@ -154,11 +154,13 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
 
   Future<void> _loadCarStatusFromFirebase(String plateNumber) async {
     try {
-      print('[Car Status] Loading status for plate: $plateNumber');
+      print('[Car Status] Loading status for plate: "$plateNumber"');
       
       // Normalize plate number (remove spaces, convert to uppercase)
       final normalizedPlate = plateNumber.replaceAll(' ', '').toUpperCase();
       final plateWithSpace = plateNumber.toUpperCase().trim();
+      
+      print('[Car Status] Search variations: normalized="$normalizedPlate", withSpace="$plateWithSpace", original="${plateNumber.trim()}"');
       
       QuerySnapshot vehicleQuery;
       
@@ -199,6 +201,23 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
         vehicleQuery = await _firestore
             .collection('vehicle')
             .where('vPlateNumber', isEqualTo: normalizedPlate)
+            .limit(1)
+            .get();
+      }
+      
+      // Try carPlateNumber in vehicle collection (alternative field name)
+      if (vehicleQuery.docs.isEmpty) {
+        vehicleQuery = await _firestore
+            .collection('vehicle')
+            .where('carPlateNumber', isEqualTo: plateWithSpace)
+            .limit(1)
+            .get();
+      }
+      
+      if (vehicleQuery.docs.isEmpty) {
+        vehicleQuery = await _firestore
+            .collection('vehicle')
+            .where('carPlateNumber', isEqualTo: normalizedPlate)
             .limit(1)
             .get();
       }
@@ -251,58 +270,98 @@ class _CarPlateScannerPageState extends State<CarPlateScannerPage> {
             .limit(1)
             .get();
       }
+      
+      // THIRD: Try 'visitor' collection for visitor vehicles
+      if (vehicleQuery.docs.isEmpty) {
+        vehicleQuery = await _firestore
+            .collection('visitor')
+            .where('carPlateNo', isEqualTo: plateWithSpace)
+            .limit(1)
+            .get();
+      }
+      
+      if (vehicleQuery.docs.isEmpty) {
+        vehicleQuery = await _firestore
+            .collection('visitor')
+            .where('carPlateNo', isEqualTo: normalizedPlate)
+            .limit(1)
+            .get();
+      }
+      
+      if (vehicleQuery.docs.isEmpty) {
+        vehicleQuery = await _firestore
+            .collection('visitor')
+            .where('carPlateNo', isEqualTo: plateNumber.trim())
+            .limit(1)
+            .get();
+      }
 
       if (vehicleQuery.docs.isNotEmpty) {
         final vehicleData = vehicleQuery.docs.first.data() as Map<String, dynamic>;
-        final foundStudentId = vehicleData['stdID'] as String?;
+        final collectionId = vehicleQuery.docs.first.reference.parent.id;
+        // Check for both stdID (studentVehicle) and studentID (vehicle collection)
+        final foundStudentId = vehicleData['stdID'] as String? ?? vehicleData['studentID'] as String?;
         
-        print('[Car Status] Found vehicle, student ID: $foundStudentId');
+        print('[Car Status] Found vehicle in collection: $collectionId, student ID: $foundStudentId');
         
-        // Store scanned student ID in state
-        setState(() {
-          scannedStudentId = foundStudentId;
-        });
-        
-        if (foundStudentId != null) {
-          // Now get the car status from studentVehicleStatus collection
-          final statusQuery = await _firestore
-              .collection('studentVehicleStatus')
-              .where('stdID', isEqualTo: foundStudentId)
-              .limit(1)
-              .get();
+        // Check if this is a visitor vehicle (from 'visitor' collection)
+        if (collectionId == 'visitor') {
+          // Visitor vehicles don't have student IDs or status
+          final visitorName = vehicleData['vstName'] as String? ?? 'Unknown';
+          print('[Car Status] This is a visitor vehicle: $visitorName');
+          setState(() {
+            scannedStudentId = null; // Visitors don't have student IDs
+            carStatus = 'Visitor Vehicle';
+          });
+        } else {
+          // Student vehicle - has stdID
+          // Store scanned student ID in state
+          setState(() {
+            scannedStudentId = foundStudentId;
+          });
+          
+          if (foundStudentId != null) {
+            // Now get the car status from studentVehicleStatus collection
+            final statusQuery = await _firestore
+                .collection('studentVehicleStatus')
+                .where('stdID', isEqualTo: foundStudentId)
+                .limit(1)
+                .get();
 
-          if (statusQuery.docs.isNotEmpty) {
-            final statusData = statusQuery.docs.first.data();
-            final status = statusData['sttType'] as String? ?? 'Unknown';
-            
-            print('[Car Status] Found status: $status');
-            
-            // Get start and end times (handling UTC+8 conversion)
-            final startTimestamp = statusData['svsStartTime'] as Timestamp?;
-            final endTimestamp = statusData['svsEndTime'] as Timestamp?;
-            
-            setState(() {
-              carStatus = status;
-              if (startTimestamp != null) {
-                startTime = _timestampToTimeOfDay(startTimestamp);
-                print('[Car Status] Start time: ${startTime!.hour}:${startTime!.minute}');
-              }
-              if (endTimestamp != null) {
-                endTime = _timestampToTimeOfDay(endTimestamp);
-                print('[Car Status] End time: ${endTime!.hour}:${endTime!.minute}');
-              }
-            });
+            if (statusQuery.docs.isNotEmpty) {
+              final statusData = statusQuery.docs.first.data();
+              final status = statusData['sttType'] as String? ?? 'Unknown';
+              
+              print('[Car Status] Found status: $status');
+              
+              // Get start and end times (handling UTC+8 conversion)
+              final startTimestamp = statusData['svsStartTime'] as Timestamp?;
+              final endTimestamp = statusData['svsEndTime'] as Timestamp?;
+              
+              setState(() {
+                carStatus = status;
+                if (startTimestamp != null) {
+                  startTime = _timestampToTimeOfDay(startTimestamp);
+                  print('[Car Status] Start time: ${startTime!.hour}:${startTime!.minute}');
+                }
+                if (endTimestamp != null) {
+                  endTime = _timestampToTimeOfDay(endTimestamp);
+                  print('[Car Status] End time: ${endTime!.hour}:${endTime!.minute}');
+                }
+              });
+            } else {
+              print('[Car Status] No status found for student ID: $foundStudentId');
+              setState(() {
+                carStatus = 'No Status';
+              });
+            }
           } else {
-            print('[Car Status] No status found for student ID: $foundStudentId');
+            // Vehicle found but no student ID (might be from vehicle collection without stdID)
+            print('[Car Status] Vehicle found but no student ID in vehicle data');
             setState(() {
-              carStatus = 'No Status';
+              carStatus = 'Vehicle Found (No Student ID)';
             });
           }
-        } else {
-          print('[Car Status] Student ID not found in vehicle data');
-          setState(() {
-            carStatus = 'Student ID not found';
-          });
         }
       } else {
         print('[Car Status] Vehicle not found in database: $plateNumber');

@@ -6,8 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Helper function to convert UTC time to local timezone
 DateTime _convertToLocalTime(DateTime utcTime) {
-  // Add 8 hours to match local timezone
-  return utcTime.add(const Duration(hours: 16));
+  // Add 8 hours to convert from UTC to UTC+8 (Malaysia timezone)
+  return utcTime.add(const Duration(hours: 8));
 }
 
 class ChatPage extends StatefulWidget {

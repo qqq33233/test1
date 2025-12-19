@@ -20,6 +20,9 @@ class _LocatorPageState extends State<LocatorPage> {
   ParkingLocation? _recommendedParking;
   final TextEditingController _locationController = TextEditingController();
   bool _showParkingMarker = false;
+  LatLng? _userLocation; // Store user's entered location coordinates
+  double? _distanceInMeters; // Store calculated distance
+  double? _estimatedTimeMinutes; // Store estimated driving time in minutes
 
   // TAR UMT Setapak Campus approximate location
   static const LatLng _defaultLocation = LatLng(3.2100, 101.7200);
@@ -330,12 +333,39 @@ class _LocatorPageState extends State<LocatorPage> {
     );
   }
 
+  // Approximate coordinates for common blocks (using parking location centers as reference)
+  LatLng _getBlockCoordinates(String blockName) {
+    // Use the parking location coordinates as approximate block locations
+    // In a real app, you'd have actual block coordinates
+    String normalizedBlock = blockName.toUpperCase().trim();
+    if (normalizedBlock.startsWith('BLOCK ')) {
+      normalizedBlock = normalizedBlock.substring(6).trim();
+    }
+    
+    String? parkingKey = _locationMapping[normalizedBlock];
+    if (parkingKey != null && _parkingLocations.containsKey(parkingKey)) {
+      // Return a slightly offset coordinate to show it's different from parking
+      final parkingCoord = _parkingLocations[parkingKey]!.coordinates;
+      // Offset by a small amount (about 100-200m) to show block location
+      return LatLng(
+        parkingCoord.latitude - 0.001, // ~100m south
+        parkingCoord.longitude - 0.001, // ~100m west
+      );
+    }
+    
+    // Default to campus center if not found
+    return _defaultLocation;
+  }
+
   Future<void> _findNearestParking() async {
-    setState(() {
-      _isFindingParking = true;
-      _recommendedParking = null;
-      _showParkingMarker = false;
-    });
+      setState(() {
+        _isFindingParking = true;
+        _recommendedParking = null;
+        _showParkingMarker = false;
+        _userLocation = null;
+        _distanceInMeters = null;
+        _estimatedTimeMinutes = null;
+      });
 
     // Get user input and normalize it
     String userInput = _locationController.text.trim().toUpperCase();
@@ -345,6 +375,9 @@ class _LocatorPageState extends State<LocatorPage> {
       userInput = userInput.substring(6).trim();
     }
     
+    // Get user's block location coordinates
+    _userLocation = _getBlockCoordinates(userInput);
+    
     // Simulate finding parking
     await Future.delayed(const Duration(seconds: 2));
 
@@ -352,8 +385,21 @@ class _LocatorPageState extends State<LocatorPage> {
     String? parkingKey = _locationMapping[userInput];
     
     if (parkingKey != null && _parkingLocations.containsKey(parkingKey)) {
+      final parking = _parkingLocations[parkingKey]!;
+      
+      // Calculate distance
+      final distance = _calculateDistance(_userLocation!, parking.coordinates);
+      
+      // Calculate estimated driving time
+      // Average speed: 25 km/h (6.94 m/s) for campus/parking lot driving
+      const double averageSpeedMetersPerSecond = 6.94; // 25 km/h
+      final estimatedTimeSeconds = distance / averageSpeedMetersPerSecond;
+      final estimatedTimeMinutes = estimatedTimeSeconds / 60.0;
+      
       setState(() {
-        _recommendedParking = _parkingLocations[parkingKey];
+        _recommendedParking = parking;
+        _distanceInMeters = distance;
+        _estimatedTimeMinutes = estimatedTimeMinutes;
         _isFindingParking = false;
       });
       // Show result bottom sheet
@@ -370,6 +416,38 @@ class _LocatorPageState extends State<LocatorPage> {
   double _calculateDistance(LatLng point1, LatLng point2) {
     const distance = Distance();
     return distance.as(LengthUnit.Meter, point1, point2);
+  }
+
+  void _zoomIn() {
+    if (_mapController != null) {
+      double currentZoom = _mapController!.camera.zoom;
+      double newZoom = (currentZoom + 1).clamp(10.0, 18.0);
+      _mapController!.move(_mapController!.camera.center, newZoom);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Zoomed in to level ${newZoom.toStringAsFixed(1)}'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  void _zoomOut() {
+    if (_mapController != null) {
+      double currentZoom = _mapController!.camera.zoom;
+      double newZoom = (currentZoom - 1).clamp(10.0, 18.0);
+      _mapController!.move(_mapController!.camera.center, newZoom);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Zoomed out to level ${newZoom.toStringAsFixed(1)}'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   void _showParkingResult() {
@@ -410,38 +488,87 @@ class _LocatorPageState extends State<LocatorPage> {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    _recommendedParking!.name,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                  Expanded(
+                    child: Text(
+                      _recommendedParking!.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  _recommendedParking!.imagePath,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: double.infinity,
-                      height: 200,
-                      color: Colors.white,
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        size: 50,
-                        color: Colors.white,
+              // Display distance and route
+              if (_distanceInMeters != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE9F4FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_car,
+                        color: Color(0xFF4E6691),
+                        size: 20,
                       ),
-                    );
-                  },
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _distanceInMeters! < 1000
+                                  ? '${_distanceInMeters!.toStringAsFixed(0)} meters'
+                                  : '${(_distanceInMeters! / 1000).toStringAsFixed(2)} km',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Estimate Time',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                if (_estimatedTimeMinutes != null) ...[
+                                  const Text(
+                                    ' • ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  Text(
+                                    _estimatedTimeMinutes! < 1
+                                        ? '${(_estimatedTimeMinutes! * 60).toStringAsFixed(0)} sec'
+                                        : '${_estimatedTimeMinutes!.toStringAsFixed(1)} min',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -475,16 +602,37 @@ class _LocatorPageState extends State<LocatorPage> {
   }
 
   void _openDirections() {
-    if (_recommendedParking == null) return;
+    if (_recommendedParking == null || _userLocation == null) return;
 
-    // Show parking location on map with marker
+    // Show parking location and user location on map with markers
     setState(() {
       _showParkingMarker = true;
     });
 
-    // Move map to show the parking location
+    // Fit both markers in view
     if (_mapController != null) {
-      _mapController!.move(_recommendedParking!.coordinates, _initialZoom);
+      // Calculate center point between user location and parking
+      final centerLat = (_userLocation!.latitude + _recommendedParking!.coordinates.latitude) / 2;
+      final centerLng = (_userLocation!.longitude + _recommendedParking!.coordinates.longitude) / 2;
+      final centerPoint = LatLng(centerLat, centerLng);
+      
+      // Calculate distance to determine appropriate zoom level
+      final distance = _calculateDistance(_userLocation!, _recommendedParking!.coordinates);
+      double zoomLevel;
+      
+      // Adjust zoom based on distance
+      if (distance < 200) {
+        zoomLevel = 17.0; // Very close, zoom in
+      } else if (distance < 500) {
+        zoomLevel = 16.0;
+      } else if (distance < 1000) {
+        zoomLevel = 15.0;
+      } else {
+        zoomLevel = 14.0; // Far apart, zoom out
+      }
+      
+      // Move map to center point with appropriate zoom
+      _mapController!.move(centerPoint, zoomLevel);
     }
 
     // Close the bottom sheet
@@ -493,6 +641,22 @@ class _LocatorPageState extends State<LocatorPage> {
 
   List<Marker> _buildMarkers() {
     List<Marker> markers = [];
+
+    // Show user's current location marker (blue) when direction is clicked
+    if (_showParkingMarker && _userLocation != null) {
+      markers.add(
+        Marker(
+          point: _userLocation!,
+          width: 50,
+          height: 50,
+          child: const Icon(
+            Icons.my_location,
+            color: Colors.blue,
+            size: 50,
+          ),
+        ),
+      );
+    }
 
     // Show parking location marker (red) when direction is clicked
     if (_showParkingMarker && _recommendedParking != null) {
@@ -511,6 +675,23 @@ class _LocatorPageState extends State<LocatorPage> {
     }
 
     return markers;
+  }
+
+  List<Polyline> _buildPolylines() {
+    List<Polyline> polylines = [];
+
+    // Draw route polyline between user location and parking when direction is clicked
+    if (_showParkingMarker && _userLocation != null && _recommendedParking != null) {
+      polylines.add(
+        Polyline(
+          points: [_userLocation!, _recommendedParking!.coordinates],
+          strokeWidth: 4.0,
+          color: const Color(0xFF4E6691), // Blue color matching app theme
+        ),
+      );
+    }
+
+    return polylines;
   }
 
   @override
@@ -542,6 +723,10 @@ class _LocatorPageState extends State<LocatorPage> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.fyp',
                 maxZoom: 18,
+              ),
+              // Polylines (route lines)
+              PolylineLayer(
+                polylines: _buildPolylines(),
               ),
               // Markers
               MarkerLayer(
@@ -589,8 +774,41 @@ class _LocatorPageState extends State<LocatorPage> {
             ),
           ),
 
-          // Floating Action Button for finding parking
-          if (!_isFindingParking && _recommendedParking == null)
+          // Zoom Controls
+          Positioned(
+            right: 16,
+            top: 100,
+            child: Column(
+              children: [
+                // Zoom In Button
+                FloatingActionButton(
+                  onPressed: _zoomIn,
+                  backgroundColor: Colors.white,
+                  mini: true,
+                  child: const Icon(
+                    Icons.zoom_in,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Zoom Out Button
+                FloatingActionButton(
+                  onPressed: _zoomOut,
+                  backgroundColor: Colors.white,
+                  mini: true,
+                  child: const Icon(
+                    Icons.zoom_out,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Floating Action Button for finding parking - always visible
+          if (!_isFindingParking)
             Positioned(
               bottom: 24,
               left: 24,
