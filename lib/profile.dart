@@ -429,7 +429,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
 
-          // Main Content
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -444,7 +443,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   const SizedBox(height: 16),
 
-                  // Stack to overlap profile photo with card
                   Stack(
                     clipBehavior: Clip.none,
                     alignment: Alignment.topCenter,
@@ -491,7 +489,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
 
-                      // Profile Image with Camera Button
                       Positioned(
                         top: 0,
                         child: Stack(
@@ -566,7 +563,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         const SizedBox(height: 16),
 
                         if (_hasVehiclePass) ...[
-                          // ✅ Has Vehicle Pass - Show details
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -592,7 +588,6 @@ class _ProfilePageState extends State<ProfilePage> {
                             value: _vehiclePassDate ?? 'N/A',
                           ),
                         ] else ...[
-                          // ✅ No Vehicle Pass - Show message
                           Center(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -623,7 +618,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 24),
 
-                  // Logout Button
                   Center(
                     child: Container(
                       width: double.infinity,

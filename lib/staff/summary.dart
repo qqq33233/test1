@@ -18,7 +18,6 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
   DateTime _toDate = DateTime.now();
   String _selectedPeriod = 'This Month';
 
-  // Current statistics
   int _trafficIncidents = 0;
   int _vehicleRegistrations = 0;
   int _passAppeals = 0;
@@ -44,34 +43,34 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF8B4F52),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+
+    // Set default to This Month
+    final now = DateTime.now();
+    _fromDate = DateTime(now.year, now.month, 1);
+    _toDate = now;
+    _selectedPeriod = 'This Month';
+
     _loadStatistics();
   }
 
   Future<void> _loadStatistics() async {
     setState(() => _isLoading = true);
 
-    try {
-      print('📊 Loading statistics...');
+    await Future.wait([
+      _loadTrafficIncidents(),
+      _loadVehicleRegistrations(),
+      _loadPassAppeals(),
+      _loadIllegalParking(),
+    ]);
 
-      // Load all counts
-      await Future.wait([
-        _loadTrafficIncidents(),
-        _loadVehicleRegistrations(),
-        _loadPassAppeals(),
-        _loadIllegalParking(),
-      ]);
-
-      print('✅ Statistics loaded');
-      print('Traffic Incidents: $_trafficIncidents');
-      print('Vehicle Registrations: $_vehicleRegistrations');
-      print('Pass Appeals: $_passAppeals');
-      print('Illegal Parking: $_illegalParking');
-
-      setState(() => _isLoading = false);
-    } catch (e) {
-      print('❌ Error loading statistics: $e');
-      setState(() => _isLoading = false);
-    }
+    setState(() => _isLoading = false);
   }
 
   Future<void> _loadTrafficIncidents() async {
@@ -79,32 +78,92 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
       final snapshot = await _firestore
           .collection('report')
           .where('reportType', isEqualTo: 'Accident')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 5));
 
-      _trafficIncidents = snapshot.docs.length;
+      // Filter by date range in code
+      final filtered = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return false;
+        final date = timestamp.toDate();
+        return date.isAfter(_fromDate) && date.isBefore(_toDate.add(Duration(days: 1)));
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _trafficIncidents = filtered.length;
+        });
+      }
     } catch (e) {
-      print('❌ Error loading traffic incidents: $e');
-      _trafficIncidents = 0;
+      print('Error loading traffic incidents: $e');
+      if (mounted) {
+        setState(() {
+          _trafficIncidents = 0;
+        });
+      }
     }
   }
 
   Future<void> _loadVehicleRegistrations() async {
     try {
-      final snapshot = await _firestore.collection('registration').get();
-      _vehicleRegistrations = snapshot.docs.length;
+      final snapshot = await _firestore
+          .collection('registration')
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      // Filter by date range in code
+      final filtered = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return true;
+        final date = timestamp.toDate();
+        return date.isAfter(_fromDate) && date.isBefore(_toDate.add(Duration(days: 1)));
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _vehicleRegistrations = filtered.length;
+        });
+      }
     } catch (e) {
-      print('❌ Error loading registrations: $e');
-      _vehicleRegistrations = 0;
+      print('Error loading vehicle registrations: $e');
+      if (mounted) {
+        setState(() {
+          _vehicleRegistrations = 0;
+        });
+      }
     }
   }
 
   Future<void> _loadPassAppeals() async {
     try {
-      final snapshot = await _firestore.collection('Appeal').get();
-      _passAppeals = snapshot.docs.length;
+      final snapshot = await _firestore
+          .collection('Appeal')
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      // Filter by date range in code
+      final filtered = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return true;
+        final date = timestamp.toDate();
+        return date.isAfter(_fromDate) && date.isBefore(_toDate.add(Duration(days: 1)));
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _passAppeals = filtered.length;
+        });
+      }
     } catch (e) {
-      print('❌ Error loading appeals: $e');
-      _passAppeals = 0;
+      print('Error loading pass appeals: $e');
+      if (mounted) {
+        setState(() {
+          _passAppeals = 0;
+        });
+      }
     }
   }
 
@@ -113,12 +172,30 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
       final snapshot = await _firestore
           .collection('report')
           .where('reportType', isEqualTo: 'Illegal Parking')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 5));
 
-      _illegalParking = snapshot.docs.length;
+      // Filter by date range in code
+      final filtered = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) return false;
+        final date = timestamp.toDate();
+        return date.isAfter(_fromDate) && date.isBefore(_toDate.add(Duration(days: 1)));
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _illegalParking = filtered.length;
+        });
+      }
     } catch (e) {
-      print('❌ Error loading illegal parking: $e');
-      _illegalParking = 0;
+      print('Error loading illegal parking: $e');
+      if (mounted) {
+        setState(() {
+          _illegalParking = 0;
+        });
+      }
     }
   }
 
@@ -145,16 +222,18 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
           const SnackBar(
             content: Text('✅ Report downloaded successfully!'),
             duration: Duration(seconds: 2),
+            backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
-      print('❌ Error downloading report: $e');
+      print('Error downloading report: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
-            duration: const Duration(seconds: 2),
+            content: Text('❌ Download failed: $e'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -182,7 +261,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Filter by:',
+                      'Filter by Date:',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -190,8 +269,6 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // From Date
                     Row(
                       children: [
                         Expanded(
@@ -262,7 +339,6 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                        // To Date
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,10 +408,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 20),
-
-                    // Quick Filter Buttons
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -343,26 +416,39 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                           'Today',
                           tempSelectedPeriod,
                           setDialogState,
-                              (value) => tempSelectedPeriod = value,
+                              (value) {
+                            tempSelectedPeriod = value;
+                            final now = DateTime.now();
+                            tempFromDate = DateTime(now.year, now.month, now.day);
+                            tempToDate = DateTime(now.year, now.month, now.day);
+                          },
                         ),
                         _buildQuickFilterButton(
                           'This Week',
                           tempSelectedPeriod,
                           setDialogState,
-                              (value) => tempSelectedPeriod = value,
+                              (value) {
+                            tempSelectedPeriod = value;
+                            final now = DateTime.now();
+                            final weekStart = now.subtract(Duration(days: now.weekday - 1));
+                            tempFromDate = weekStart;
+                            tempToDate = now;
+                          },
                         ),
                         _buildQuickFilterButton(
                           'This Month',
                           tempSelectedPeriod,
                           setDialogState,
-                              (value) => tempSelectedPeriod = value,
+                              (value) {
+                            tempSelectedPeriod = value;
+                            final now = DateTime.now();
+                            tempFromDate = DateTime(now.year, now.month, 1);
+                            tempToDate = now;
+                          },
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Buttons
                     Row(
                       children: [
                         Expanded(
@@ -394,7 +480,7 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                                 _selectedPeriod = tempSelectedPeriod;
                               });
                               Navigator.pop(context);
-                              _loadStatistics(); // Reload with new filter
+                              _loadStatistics();
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF8B4F52),
@@ -459,14 +545,6 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Color(0xFF8B4F52),
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -495,102 +573,76 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with filter icon
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _selectedMonth == 'Monthly'
-                        ? 'Overview Of This Month'
-                        : 'Overview',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                  Expanded(
+                    child: Text(
+                      'Overview',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.tune, size: 24),
+                    icon: const Icon(Icons.tune, size: 24, color: Color(0xFF8B4F52)),
                     onPressed: _showFilterDialog,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
                 ],
               ),
-
-              const SizedBox(height: 16),
-
-              // Dropdown and Download Button Row
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                child: Text(
+                  'From: ${_fromDate.day}/${_fromDate.month}/${_fromDate.year}  To: ${_toDate.day}/${_toDate.month}/${_toDate.year}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 children: [
-                  // Month Dropdown
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE0E0E0)),
-                        borderRadius: BorderRadius.circular(8),
+                    child: OutlinedButton.icon(
+                      onPressed: _downloadReport,
+                      icon: const Icon(
+                        Icons.download,
+                        size: 18,
+                        color: Color(0xFF8B4F52),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedMonth,
-                          isExpanded: true,
-                          items: _months.map((String month) {
-                            return DropdownMenuItem<String>(
-                              value: month,
-                              child: Text(
-                                month,
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            if (newValue != null) {
-                              setState(() {
-                                _selectedMonth = newValue;
-                              });
-                              _loadStatistics();
-                            }
-                          },
+                      label: const Text(
+                        'Download',
+                        style: TextStyle(
+                          color: Color(0xFF8B4F52),
+                          fontSize: 12,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Download Report Button - ✅ 改这里
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      _downloadReport(); // 调用下载函数
-                    },
-                    icon: const Icon(
-                      Icons.download,
-                      size: 18,
-                      color: Colors.black54,
-                    ),
-                    label: const Text(
-                      'Download Report',
-                      style: TextStyle(
-                        color: Colors.black54,
-                        fontSize: 12,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFE0E0E0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF8B4F52)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
-
-              // Statistics Grid
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -602,38 +654,30 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
                   _buildStatCard(
                     'Traffic\nIncidents',
                     _trafficIncidents.toString(),
-                    '12% from last month',
                     const Color(0xFFFFE5E5),
                     Icons.warning,
                     Colors.red,
-                    true,
                   ),
                   _buildStatCard(
                     'Vehicle\nRegistration',
                     _vehicleRegistrations.toString(),
-                    '8% from last month',
                     const Color(0xFFE5F5E5),
                     Icons.description,
                     Colors.green,
-                    false,
                   ),
                   _buildStatCard(
                     'Pass\nAppeal',
                     _passAppeals.toString(),
-                    '12% from last month',
                     const Color(0xFFF3E5FF),
                     Icons.mail,
                     Colors.purple,
-                    true,
                   ),
                   _buildStatCard(
                     'Illegal\nParking',
                     _illegalParking.toString(),
-                    '18% from last month',
                     const Color(0xFFFFF9E5),
                     Icons.local_parking,
                     Colors.orange,
-                    true,
                   ),
                 ],
               ),
@@ -647,11 +691,9 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
   Widget _buildStatCard(
       String title,
       String value,
-      String change,
       Color bgColor,
       IconData icon,
       Color iconColor,
-      bool isIncrease,
       ) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -688,26 +730,6 @@ class _SummaryStaffPageState extends State<SummaryStaffPage> {
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                isIncrease ? Icons.trending_up : Icons.trending_down,
-                size: 14,
-                color: isIncrease ? Colors.red : Colors.green,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  change,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isIncrease ? Colors.red : Colors.green,
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),

@@ -7,7 +7,6 @@ class RoleSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Set system status bar
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Color(0xFF4E6691),
@@ -20,7 +19,6 @@ class RoleSelectionScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Header Bar with "Welcome,"
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -42,7 +40,6 @@ class RoleSelectionScreen extends StatelessWidget {
             ),
           ),
 
-          // Main Content
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -60,7 +57,6 @@ class RoleSelectionScreen extends StatelessWidget {
 
                   const SizedBox(height: 60),
 
-                  // Student Login Button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
