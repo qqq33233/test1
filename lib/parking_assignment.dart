@@ -793,20 +793,14 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
       final nextNumber = querySnapshot.docs.length + 1;
       final spotRsvtID = 'B${nextNumber.toString().padLeft(7, '0')}';
       
-      // Get current time and convert to UTC for storage
-      // DateTime.now() gives local time, convert to UTC for Firebase
-      final now = DateTime.now();
-      final utcTime = now.toUtc();
-      
-      // Prepare reservation data
-      // Status is 'Reserved' initially - user has 5 minutes to park
-      // Will be changed to 'UpComing' when user confirms they've parked
+      // Get current time - use serverTimestamp to ensure correct UTC storage
+      // FieldValue.serverTimestamp() ensures the timestamp is stored correctly in UTC by the server
       final reservationData = {
         'stdID': widget.studentId,
         'spotLocation': widget.selectedArea,
         'spotRsvtID': spotRsvtID,
-        'spotRsvtStatus': 'Reserved',  // Reserved status - spot unavailable to others for 5 minutes
-        'rsvTime': Timestamp.fromDate(utcTime),
+        'spotRsvtStatus': 'UpComing',  // UpComing status - will appear in Upcoming tab for 1 minute, then move to History
+        'rsvTime': FieldValue.serverTimestamp(), // Use server timestamp for accurate UTC storage
       };
       
       // Add spot number if assigned
@@ -819,7 +813,21 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
       }
       
       // Create reservation document
-      await reservationsRef.add(reservationData);
+      final docRef = await reservationsRef.add(reservationData);
+      print('SUCCESS: Created reservation with ID: ${docRef.id}');
+      print('  Status: ${reservationData['spotRsvtStatus']}');
+      print('  Location: ${reservationData['spotLocation']}');
+      print('  Student ID: ${reservationData['stdID']}');
+      
+      // Verify the document was created correctly
+      final verifyDoc = await docRef.get();
+      if (verifyDoc.exists) {
+        final verifyData = verifyDoc.data() as Map<String, dynamic>?;
+        print('VERIFY: Document created with status: ${verifyData?['spotRsvtStatus']}');
+        if (verifyData?['spotRsvtStatus'] != 'UpComing') {
+          print('WARNING: Reservation was created with wrong status! Expected UpComing, got ${verifyData?['spotRsvtStatus']}');
+        }
+      }
       
       print('Reservation saved to Firebase: $spotRsvtID with spotNo: ${reservationData['spotNo']}');
     } catch (e) {
@@ -870,7 +878,7 @@ class _ParkingDisplayPageState extends State<ParkingDisplayPage> {
           },
         ),
         title: const Text(
-          'Parking Display and Booking',
+          'Parking Spot Reservation',
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,

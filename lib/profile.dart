@@ -10,6 +10,7 @@ import 'home_page.dart';
 import 'stut_login.dart';
 import 'message.dart';
 import 'carPlate_scanner.dart';
+import 'notification.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? studentId;
@@ -770,6 +771,13 @@ class _ProfilePageState extends State<ProfilePage> {
             context,
             MaterialPageRoute(
               builder: (context) => MessagePage(studentId: widget.studentId),
+            ),
+          );
+        } else if (label == 'Notification') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NotificationPage(studentId: widget.studentId),
             ),
           );
         }

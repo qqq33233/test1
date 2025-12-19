@@ -106,7 +106,15 @@ class VisitorHistoryPage extends StatelessWidget {
                     if (studentId == null) {
                       // From login page: show only visitors WITHOUT stdID field (independent)
                       // Field should not exist, or be null/empty
-                      return !hasStdID || docStdID == null || (docStdID is String && docStdID.trim().isEmpty);
+                      if (!hasStdID) {
+                        // Field doesn't exist - this is correct for independent visitors
+                        return true;
+                      }
+                      // Field exists - check if it's null or empty
+                      if (docStdID == null) return true;
+                      if (docStdID is String && docStdID.trim().isEmpty) return true;
+                      // Field exists and has a value - this visitor belongs to a student, exclude it
+                      return false;
                     } else {
                       // From logged-in student: show only visitors WITH this student's stdID
                       // Must have stdID field and it must match the student's ID exactly

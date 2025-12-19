@@ -7,11 +7,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_page.dart';
 import 'profile.dart';
 import 'chat_page.dart';
+import 'notification.dart';
+import 'carPlate_scanner.dart';
 
 // Helper function to convert UTC time to local timezone
 DateTime _convertToLocalTime(DateTime utcTime) {
-  // Add 8 hours to match local timezone
-  return utcTime.add(const Duration(hours: 16));
+  // Add 8 hours to convert from UTC to UTC+8 (Malaysia timezone)
+  return utcTime.add(const Duration(hours: 8));
 }
 
 class MessagePage extends StatefulWidget {
@@ -373,9 +375,14 @@ class _MessagePageState extends State<MessagePage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(40),
               onTap: () {
-                setState(() {
-                  _selectedIndex = 2;
-                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CarPlateScannerPage(
+                      loggedInStudentId: widget.studentId,
+                    ),
+                  ),
+                );
               },
               child: Center(
                 child: Container(
@@ -566,6 +573,13 @@ class _MessagePageState extends State<MessagePage> {
             context,
             MaterialPageRoute(
               builder: (context) => ProfilePage(studentId: widget.studentId),
+            ),
+          );
+        } else if (label == 'Notification') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NotificationPage(studentId: widget.studentId),
             ),
           );
         } else if (label == 'Message') {

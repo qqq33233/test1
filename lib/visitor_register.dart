@@ -50,21 +50,7 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
     super.dispose();
   }
 
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    
-    if (picked != null) {
-      final formattedDate = _formatDate(picked);
-      setState(() {
-        _visitDateController.text = formattedDate;
-      });
-    }
-  }
+  // Date selection removed - visit date is always set to today
 
   String _formatDate(DateTime date) {
     const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -316,28 +302,20 @@ class _VisitorRegisterPageState extends State<VisitorRegisterPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: _selectDate,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFCFCFCF)),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCFCFCF)),
+                    ),
+                    child: TextField(
+                      controller: _visitDateController,
+                      enabled: false,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
-                      child: TextField(
-                        controller: _visitDateController,
-                        enabled: false,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          suffixIcon: Icon(
-                            Icons.calendar_today,
-                            color: Colors.black,
-                            size: 20,
-                          ),
-                        ),
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                      style: const TextStyle(fontSize: 16, color: Colors.black87),
                     ),
                   ),
                   
